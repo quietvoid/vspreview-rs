@@ -13,13 +13,13 @@ Requires OpenGL, probably other stuff.
 `vspreview-rs script.vpy`
 
 ### Keybindings
-Seek 1 frame: Right, Left
-Seek 1 second: Down, Up
+Seek 1 frame: Right, Left  
+Seek 1 second: Down, Up  
 
 Zoom: Ctrl + Scroll
 
-Scroll horizontally: Home/End, Shift + Scroll
-Scroll vertically: PageUp/PageDown, Scroll
+Scroll horizontally: Home/End, Shift + Scroll  
+Scroll vertically: PageUp/PageDown, Scroll  
 
-Take a screenshot: S (saves to script directory)
-Close: Escape
+Take a screenshot: S (saves to script directory)  
+Close: Escape  

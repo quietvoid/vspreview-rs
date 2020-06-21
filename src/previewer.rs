@@ -103,7 +103,7 @@ impl Previewer {
             Key::F5 => self.reload_script(),
             Key::LCtrl | Key::LShift => {
                 self.keys_pressed.insert(*key);
-            },
+            }
             Key::S => self.save_screenshot(),
             Key::Home | Key::End => {
                 let change = match key {
@@ -131,7 +131,7 @@ impl Previewer {
         match key {
             Key::LCtrl | Key::LShift => {
                 self.keys_pressed.remove(key);
-            },
+            }
             _ => (),
         }
     }
@@ -238,7 +238,7 @@ impl Previewer {
         let (img_w, draw_w) = (self.texture.get_width() as f64, window.draw_size().width);
 
         if !self.fits_in_view(&window) {
-           self.horizontal_offset += draw_w * change;
+            self.horizontal_offset += draw_w * change;
         }
 
         self.set_horizontal_offset(img_w, draw_w);
