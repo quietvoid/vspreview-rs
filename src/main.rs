@@ -22,7 +22,7 @@ struct Opt {
 fn main() {
     let opt = Opt::from_args();
 
-    let opengl = OpenGL::V4_5;
+    let opengl = OpenGL::V3_2;
     let mut window: PistonWindow =
         WindowSettings::new("VS Preview", [800,600])
         .exit_on_esc(true)
