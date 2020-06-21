@@ -1,10 +1,10 @@
-extern crate piston_window;
 extern crate image;
+extern crate piston_window;
 
 use std::collections::HashSet;
 
-use piston_window::*;
 use image::{ImageBuffer, Rgba};
+use piston_window::*;
 
 const MIN_ZOOM: f64 = 1.0;
 const MAX_ZOOM: f64 = 30.0;
@@ -36,8 +36,9 @@ impl Previewer {
         let image: G2dTexture = Texture::from_image(
             &mut window.create_texture_context(),
             &cur_frame,
-            &TextureSettings::new().mag(texture::Filter::Nearest)
-        ).unwrap();
+            &TextureSettings::new().mag(texture::Filter::Nearest),
+        )
+        .unwrap();
 
         let previewer = Self {
             script,
@@ -53,13 +54,16 @@ impl Previewer {
 
         let window_size = previewer.get_window_size(&window);
         window.set_size(window_size);
-        window.set_title(format!("VS Preview - Frame {}, Zoom: {:.0}x", initial_frame, zoom_factor));
+        window.set_title(format!(
+            "VS Preview - Frame {}, Zoom: {:.0}x",
+            initial_frame, zoom_factor
+        ));
 
         previewer
     }
 
     pub fn rerender(&mut self, window: &mut PistonWindow, event: &Event) {
-        let (dx, dy) =self.get_scaling(window);
+        let (dx, dy) = self.get_scaling(window);
 
         let frame_no = self.cur_frame_no.lock().unwrap();
 
@@ -68,18 +72,23 @@ impl Previewer {
             self.texture = Texture::from_image(
                 &mut window.create_texture_context(),
                 &self.cur_frame,
-                &TextureSettings::new().mag(texture::Filter::Nearest)
-            ).unwrap();
-            
+                &TextureSettings::new().mag(texture::Filter::Nearest),
+            )
+            .unwrap();
+
             self.rerender = false;
         }
 
-        window.set_title(format!("VS Preview - Frame {}, Zoom: {:.0}x", *frame_no, self.zoom_factor));
+        window.set_title(format!(
+            "VS Preview - Frame {}, Zoom: {:.0}x",
+            *frame_no, self.zoom_factor
+        ));
 
         window.draw_2d(event, |mut c, g, _| {
             clear([1.0; 4], g);
 
-            c.transform = c.transform
+            c.transform = c
+                .transform
                 .scale(dx, dy)
                 .trans(self.horizontal_offset, self.vertical_offset)
                 .zoom(self.zoom_factor);
@@ -92,33 +101,37 @@ impl Previewer {
         match key {
             Key::Right | Key::Left | Key::Down | Key::Up => self.seek(key),
             Key::F5 => self.reload_script(),
-            Key::LCtrl => {
-                self.keys_pressed.insert(Key::LCtrl);
+            Key::LCtrl | Key::LShift => {
+                self.keys_pressed.insert(*key);
             },
             Key::S => self.save_screenshot(),
             Key::Home | Key::End => {
-                let (img_w, draw_w) = (self.texture.get_width() as f64, window.draw_size().width);
-
-                match key {
-                    Key::Home => self.horizontal_offset += window.draw_size().width,
-                    Key::End => self.horizontal_offset -= window.draw_size().width,
-                    _ => (),
+                let change = match key {
+                    Key::Home => 1.0,
+                    Key::End => -1.0,
+                    _ => 0.0,
                 };
 
-                self.set_horizontal_offset(img_w, draw_w);
-            },
-            Key::PageUp | Key::PageDown => {
-
+                self.translate_horizontally(window, change);
             }
-            _ => ()
+            Key::PageUp | Key::PageDown => {
+                let change = match key {
+                    Key::PageUp => 1.0,
+                    Key::PageDown => -1.0,
+                    _ => 0.0,
+                };
+
+                self.translate_vertically(window, change);
+            }
+            _ => (),
         };
     }
 
     pub fn handle_key_release(&mut self, key: &Key) {
         match key {
-            Key::LCtrl => {
-                self.keys_pressed.remove(&Key::LCtrl);
-            }
+            Key::LCtrl | Key::LShift => {
+                self.keys_pressed.remove(key);
+            },
             _ => (),
         }
     }
@@ -126,10 +139,9 @@ impl Previewer {
     pub fn handle_mouse_scroll(&mut self, window: &PistonWindow, ticks: [f64; 2]) {
         let change = ticks.last().unwrap();
 
-        let (img_h, draw_h) = (self.texture.get_height() as f64, window.draw_size().height);
-
         if self.keys_pressed.contains(&Key::LCtrl) {
             let (img_w, draw_w) = (self.texture.get_width() as f64, window.draw_size().width);
+            let (img_h, draw_h) = (self.texture.get_height() as f64, window.draw_size().height);
 
             self.zoom_factor += change;
 
@@ -141,40 +153,38 @@ impl Previewer {
 
             self.set_vertical_offset(img_h, draw_h);
             self.set_horizontal_offset(img_w, draw_w);
+        } else if self.keys_pressed.contains(&Key::LShift) {
+            self.translate_horizontally(window, *change);
         } else {
-            if !self.fits_in_view(&window) {
-                self.vertical_offset += draw_h * change;
-            }
-            
-            self.set_vertical_offset(img_h, draw_h);
+            self.translate_vertically(window, *change);
         }
     }
 
     fn get_window_size(&self, window: &PistonWindow) -> Size {
         let (dx, dy) = self.get_scaling(window);
-    
+
         let new_width = self.texture.get_width() as f64 * dx;
         let new_height = self.texture.get_height() as f64 * dy;
-    
+
         Size::from((new_width, new_height))
     }
-    
+
     fn get_scaling(&self, window: &PistonWindow) -> (f64, f64) {
         let size = window.size();
         let draw_size = window.draw_size();
-    
+
         let dx = size.width as f64 / draw_size.width as f64;
         let dy = size.height as f64 / draw_size.height as f64;
-    
+
         (dx, dy)
     }
-    
+
     fn fits_in_view(&self, window: &PistonWindow) -> bool {
         let image_w = self.texture.get_width() as f64 * self.zoom_factor;
         let image_h = self.texture.get_height() as f64 * self.zoom_factor;
 
         let draw_size = window.draw_size();
-    
+
         draw_size.width >= image_w || draw_size.height >= image_h
     }
 
@@ -186,15 +196,33 @@ impl Previewer {
     fn seek(&mut self, key: &Key) {
         if let Ok(mut frame_write) = self.cur_frame_no.try_lock() {
             let script = &self.script;
-            let mut current = frame_write.clone();
+            let mut current = *frame_write;
 
             let num_frames = script.get_num_frames();
             let frame_rate_num = script.get_frame_rate();
 
             match key {
-                Key::Right => if current < num_frames { current += 1 } else { current = num_frames },
-                Key::Left => if current > 0 { current -= 1 } else { current = 0 },
-                Key::Up => if current > frame_rate_num { current -= frame_rate_num } else { current = 0 },
+                Key::Right => {
+                    if current < num_frames {
+                        current += 1
+                    } else {
+                        current = num_frames
+                    }
+                }
+                Key::Left => {
+                    if current > 0 {
+                        current -= 1
+                    } else {
+                        current = 0
+                    }
+                }
+                Key::Up => {
+                    if current > frame_rate_num {
+                        current -= frame_rate_num
+                    } else {
+                        current = 0
+                    }
+                }
                 Key::Down => current += frame_rate_num,
                 _ => (),
             }
@@ -204,6 +232,26 @@ impl Previewer {
                 self.rerender = true;
             }
         }
+    }
+
+    fn translate_horizontally(&mut self, window: &PistonWindow, change: f64) {
+        let (img_w, draw_w) = (self.texture.get_width() as f64, window.draw_size().width);
+
+        if !self.fits_in_view(&window) {
+           self.horizontal_offset += draw_w * change;
+        }
+
+        self.set_horizontal_offset(img_w, draw_w);
+    }
+
+    fn translate_vertically(&mut self, window: &PistonWindow, change: f64) {
+        let (img_h, draw_h) = (self.texture.get_height() as f64, window.draw_size().height);
+
+        if !self.fits_in_view(&window) {
+            self.vertical_offset += draw_h * change;
+        }
+
+        self.set_vertical_offset(img_h, draw_h);
     }
 
     fn save_screenshot(&self) {
@@ -220,14 +268,14 @@ impl Previewer {
             println!("Screenshot ");
         }
     }
-    
+
     fn set_vertical_offset(&mut self, img_h: f64, draw_h: f64) {
         let mut max_off = (-1.0 * self.zoom_factor * img_h) + draw_h;
-    
+
         if max_off.is_sign_positive() {
             max_off = 0.0;
         }
-    
+
         if self.vertical_offset.is_sign_positive() {
             self.vertical_offset = 0.0;
         } else if self.vertical_offset < max_off {
