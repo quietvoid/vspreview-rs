@@ -4,7 +4,6 @@ extern crate piston_window;
 use super::previewed_script::PreviewedScript;
 
 use std::collections::HashSet;
-use std::path::PathBuf;
 
 use image::{ImageBuffer, Rgba};
 use piston_window::*;
@@ -46,8 +45,11 @@ impl Previewer {
         .unwrap();
 
         let glyphs = Glyphs::from_bytes(
-            font, window.create_texture_context(), TextureSettings::new()
-        ).unwrap();
+            font,
+            window.create_texture_context(),
+            TextureSettings::new(),
+        )
+        .unwrap();
 
         let previewer = Self {
             script,
@@ -237,44 +239,46 @@ impl Previewer {
     }
 
     fn seek(&mut self, key: &Key) {
-        let script = &self.script;
-        let frame_write = self.cur_frame_no;
-        let mut current = frame_write;
+        if !self.rerender {
+            let script = &self.script;
+            let frame_write = self.cur_frame_no;
+            let mut current = frame_write;
 
-        let num_frames = script.get_num_frames();
-        let frame_rate_num = script.get_frame_rate();
+            let num_frames = script.get_num_frames();
+            let frame_rate_num = script.get_frame_rate();
 
-        match key {
-            Key::Right => {
-                if current < num_frames {
-                    current += 1
-                } else {
-                    current = num_frames
+            match key {
+                Key::Right => {
+                    if current < num_frames {
+                        current += 1
+                    } else {
+                        current = num_frames
+                    }
                 }
-            }
-            Key::Left => {
-                if current > 0 {
-                    current -= 1
-                } else {
-                    current = 0
+                Key::Left => {
+                    if current > 0 {
+                        current -= 1
+                    } else {
+                        current = 0
+                    }
                 }
-            }
-            Key::Up => {
-                if current > frame_rate_num {
-                    current -= frame_rate_num
-                } else {
-                    current = 0
+                Key::Up => {
+                    if current > frame_rate_num {
+                        current -= frame_rate_num
+                    } else {
+                        current = 0
+                    }
                 }
+                Key::Down => current += frame_rate_num,
+                _ => (),
             }
-            Key::Down => current += frame_rate_num,
-            _ => (),
-        }
 
-        if current > num_frames {
-            self.cur_frame_no = num_frames;
-        } else if !self.rerender && current != frame_write {
-            self.cur_frame_no = current;
-            self.rerender = true;
+            if current > num_frames {
+                self.cur_frame_no = num_frames;
+            } else if current != frame_write {
+                self.cur_frame_no = current;
+                self.rerender = true;
+            }
         }
     }
 

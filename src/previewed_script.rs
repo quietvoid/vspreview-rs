@@ -100,6 +100,13 @@ impl PreviewedScript {
         args.set_node("clip", &node).unwrap();
         args.set_int("format", RGB24_FORMAT as i64).unwrap();
 
+        if let Property::Constant(f) = node.info().format{
+            match f.color_family() {
+                ColorFamily::YUV => args.set_int("matrix_in", 1).unwrap(),
+            _   => (),
+            }
+        }
+
         let rgb = resize_plugin.invoke("Point", &args).unwrap();
         node = rgb.get_node("clip").unwrap();
 
@@ -111,7 +118,7 @@ impl PreviewedScript {
             frame.plane(2).unwrap(),
         );
 
-        println!("Got frame in {}ms", now.elapsed().as_millis());
+        //println!("Got frame in {}ms", now.elapsed().as_millis());
 
         self.to_rgba_buf(frame.resolution(0), r, g, b)
     }
