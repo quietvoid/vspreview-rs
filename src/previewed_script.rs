@@ -1,23 +1,49 @@
 use std::path::PathBuf;
-use std::sync::RwLock;
 use std::time::Instant;
 
 use itertools::izip;
 use vapoursynth::prelude::*;
 use vapoursynth::video_info::Resolution;
+use vapoursynth::video_info::VideoInfo;
 
 const RGB24_FORMAT: i32 = PresetFormat::RGB24 as i32;
 
 pub struct PreviewedScript {
-    env: RwLock<Environment>,
+    env: Environment,
     script_file: String,
     script_dir: PathBuf,
-    format: String,
-    width: u32,
-    height: u32,
     num_frames: u32,
-    frame_rate: String,
     frame_rate_num: u32,
+    summary: String,
+}
+
+fn get_summary(info: VideoInfo) -> String {
+    let (width, height) = match info.resolution {
+        Property::Constant(r) => (r.width, r.height),
+        Property::Variable => panic!("Only supports constant resolution!"),
+    };
+    let format = match info.format {
+        Property::Constant(f) => f,
+        Property::Variable => panic!("Unsupported format!"),
+    };
+
+    let (fr_num, fr_denom) = match info.framerate {
+        Property::Constant(fr) => (fr.numerator, fr.denominator),
+        Property::Variable => panic!("Only supports constant framerate!"),
+    };
+
+    let summary = format!(
+        "Frames: {} | Size: {}x{} | FPS: {}/{} = {:.3} | Format: {}",
+        info.num_frames,
+        width,
+        height,
+        fr_num,
+        fr_denom,
+        (fr_num as f32 / fr_denom as f32),
+        format.name(),
+    );
+
+    summary
 }
 
 impl PreviewedScript {
@@ -32,50 +58,35 @@ impl PreviewedScript {
         let node = env.get_output(0).unwrap().0;
         let info = node.info();
 
-        let resolution = match info.resolution {
-            Property::Constant(r) => r,
-            Property::Variable => panic!("Only supports constant resolution!"),
-        };
+        let summary = get_summary(info);
 
-        let (width, height) = (resolution.width as u32, resolution.height as u32);
-
-        let format = match info.format {
-            Property::Constant(f) => f,
-            Property::Variable => panic!("Unsupported format!"),
-        };
-
-        let framerate = match info.framerate {
-            Property::Constant(fr) => fr,
+        let (fr_num, fr_denom) = match info.framerate {
+            Property::Constant(fr) => (fr.numerator, fr.denominator),
             Property::Variable => panic!("Only supports constant framerate!"),
         };
 
-        let (fr_num, fr_denom) = (framerate.numerator, framerate.denominator);
-
         Self {
-            env: RwLock::new(
-                Environment::from_file(&script_file, EvalFlags::SetWorkingDir).unwrap(),
-            ),
+            env: Environment::from_file(&script_file, EvalFlags::SetWorkingDir).unwrap(),
             script_file,
             script_dir,
-            format: format.name().into(),
-            width,
-            height,
             num_frames: info.num_frames as u32,
-            frame_rate: format!("{}/{}", fr_num, fr_denom),
             frame_rate_num: (fr_num as f64 / fr_denom as f64).ceil() as u32,
+            summary,
         }
     }
 
-    pub fn reload(&self) {
-        let mut env = self.env.write().unwrap();
+    pub fn reload(&mut self) {
+        let env = &mut self.env;
         env.eval_file(&self.script_file, EvalFlags::SetWorkingDir)
             .unwrap();
+
+        self.update_fields();
     }
 
     pub fn get_frame(&self, frame_no: u32) -> image::ImageBuffer<image::Rgba<u8>, Vec<u8>> {
         let now = Instant::now();
 
-        let env = self.env.read().unwrap();
+        let env = &self.env;
         let mut node = env.get_output(0).unwrap().0;
 
         let resize_plugin = env
@@ -136,5 +147,26 @@ impl PreviewedScript {
 
     pub fn get_script_dir(&self) -> PathBuf {
         self.script_dir.clone()
+    }
+
+    pub fn get_summary(&self) -> &str {
+        &self.summary
+    }
+
+    fn update_fields(&mut self) {
+        let env = &self.env;
+
+        let node = env.get_output(0).unwrap().0;
+        let info = node.info();
+
+        let (fr_num, fr_denom) = match info.framerate {
+            Property::Constant(fr) => (fr.numerator, fr.denominator),
+            Property::Variable => panic!("Only supports constant framerate!"),
+        };
+
+        self.num_frames = info.num_frames as u32;
+        self.frame_rate_num = (fr_num as f64 / fr_denom as f64).ceil() as u32;
+
+        self.summary = get_summary(info);
     }
 }

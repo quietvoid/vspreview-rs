@@ -1,7 +1,7 @@
 # vspreview-rs
 minimal VapourSynth script previewer
 
-WIP  
+WIP
 Requires OpenGL, probably other stuff.
 
 ## Building
@@ -21,5 +21,6 @@ Zoom: Ctrl + Scroll
 Scroll horizontally: Home/End, Shift + Scroll  
 Scroll vertically: PageUp/PageDown, Scroll  
 
+Show OSD info: I (toggle)
 Take a screenshot: S (saves to script directory)  
-Close: Escape  
+Close: Escape

@@ -1,7 +1,10 @@
 extern crate image;
 extern crate piston_window;
 
+use super::previewed_script::PreviewedScript;
+
 use std::collections::HashSet;
+use std::path::PathBuf;
 
 use image::{ImageBuffer, Rgba};
 use piston_window::*;
@@ -9,14 +12,13 @@ use piston_window::*;
 const MIN_ZOOM: f64 = 1.0;
 const MAX_ZOOM: f64 = 30.0;
 
-use super::previewed_script::PreviewedScript;
-
-use std::sync::{Arc, Mutex};
-
 pub struct Previewer {
     script: PreviewedScript,
     cur_frame: ImageBuffer<Rgba<u8>, Vec<u8>>,
-    cur_frame_no: Arc<Mutex<u32>>,
+    cur_frame_no: u32,
+
+    glyphs: Glyphs,
+    texture_context: G2dTextureContext,
     texture: G2dTexture,
     zoom_factor: f64,
     vertical_offset: f64,
@@ -27,23 +29,32 @@ pub struct Previewer {
 
 impl Previewer {
     pub fn new(window: &mut PistonWindow, script: PreviewedScript, initial_frame: u32) -> Self {
+        let font = std::include_bytes!("../assets/FiraSans-Regular.ttf");
+
         let zoom_factor = 1.0;
         let vertical_offset = 0.0;
         let horizontal_offset = 0.0;
 
         let cur_frame = script.get_frame(initial_frame);
 
+        let mut texture_context = window.create_texture_context();
         let image: G2dTexture = Texture::from_image(
-            &mut window.create_texture_context(),
+            &mut texture_context,
             &cur_frame,
             &TextureSettings::new().mag(texture::Filter::Nearest),
         )
         .unwrap();
 
+        let glyphs = Glyphs::from_bytes(
+            font, window.create_texture_context(), TextureSettings::new()
+        ).unwrap();
+
         let previewer = Self {
             script,
             cur_frame,
-            cur_frame_no: Arc::new(Mutex::new(initial_frame)),
+            cur_frame_no: initial_frame,
+            glyphs,
+            texture_context,
             texture: image,
             zoom_factor,
             vertical_offset,
@@ -64,43 +75,68 @@ impl Previewer {
 
     pub fn rerender(&mut self, window: &mut PistonWindow, event: &Event) {
         let (dx, dy) = self.get_scaling(window);
+        let osd_y = (window.draw_size().height * dy) - 12.0;
 
-        let frame_no = self.cur_frame_no.lock().unwrap();
+        let frame_no = self.cur_frame_no;
 
         if self.rerender {
-            self.cur_frame = self.script.get_frame(*frame_no);
-            self.texture = Texture::from_image(
-                &mut window.create_texture_context(),
-                &self.cur_frame,
-                &TextureSettings::new().mag(texture::Filter::Nearest),
-            )
-            .unwrap();
+            self.cur_frame = self.script.get_frame(frame_no);
+            self.texture
+                .update(&mut self.texture_context, &self.cur_frame)
+                .unwrap();
 
             self.rerender = false;
         }
 
         window.set_title(format!(
-            "VS Preview - Frame {}, Zoom: {:.0}x",
-            *frame_no, self.zoom_factor
+            "VS Preview - Frame {}/{}, Zoom: {:.0}x",
+            frame_no,
+            self.script.get_num_frames(),
+            self.zoom_factor,
         ));
 
-        window.draw_2d(event, |mut c, g, _| {
-            clear([1.0; 4], g);
+        window.draw_2d(event, |c, g, device| {
+            clear([0.20; 4], g);
 
-            c.transform = c
+            let img_transform = c
                 .transform
                 .scale(dx, dy)
                 .trans(self.horizontal_offset, self.vertical_offset)
                 .zoom(self.zoom_factor);
 
-            piston_window::image(&self.texture, c.transform, g);
+            piston_window::image(&self.texture, img_transform, g);
+
+            if self.keys_pressed.contains(&Key::I) {
+                let transform = c.transform.trans(10.0, osd_y).zoom(0.5);
+                text::Text::new_color([0.85, 0.85, 0.85, 1.0], 32)
+                    .draw(
+                        self.script.get_summary(),
+                        &mut self.glyphs,
+                        &c.draw_state,
+                        transform,
+                        g,
+                    )
+                    .unwrap();
+
+                self.glyphs.factory.encoder.flush(device);
+            }
+
+            // Flush to GPU
+            self.texture_context.encoder.flush(device);
         });
     }
 
     pub fn handle_key_press(&mut self, window: &PistonWindow, key: &Key) {
         match key {
             Key::Right | Key::Left | Key::Down | Key::Up => self.seek(key),
-            Key::F5 => self.reload_script(),
+            Key::F5 => {
+                self.reload_script();
+                let new_max_frames = self.script.get_num_frames();
+
+                if self.cur_frame_no > new_max_frames {
+                    self.cur_frame_no = new_max_frames;
+                }
+            }
             Key::LCtrl | Key::LShift => {
                 self.keys_pressed.insert(*key);
             }
@@ -122,6 +158,13 @@ impl Previewer {
                 };
 
                 self.translate_vertically(window, change);
+            }
+            Key::I => {
+                if !self.keys_pressed.contains(key) {
+                    self.keys_pressed.insert(*key);
+                } else {
+                    self.keys_pressed.remove(key);
+                }
             }
             _ => (),
         };
@@ -194,43 +237,44 @@ impl Previewer {
     }
 
     fn seek(&mut self, key: &Key) {
-        if let Ok(mut frame_write) = self.cur_frame_no.try_lock() {
-            let script = &self.script;
-            let mut current = *frame_write;
+        let script = &self.script;
+        let frame_write = self.cur_frame_no;
+        let mut current = frame_write;
 
-            let num_frames = script.get_num_frames();
-            let frame_rate_num = script.get_frame_rate();
+        let num_frames = script.get_num_frames();
+        let frame_rate_num = script.get_frame_rate();
 
-            match key {
-                Key::Right => {
-                    if current < num_frames {
-                        current += 1
-                    } else {
-                        current = num_frames
-                    }
+        match key {
+            Key::Right => {
+                if current < num_frames {
+                    current += 1
+                } else {
+                    current = num_frames
                 }
-                Key::Left => {
-                    if current > 0 {
-                        current -= 1
-                    } else {
-                        current = 0
-                    }
-                }
-                Key::Up => {
-                    if current > frame_rate_num {
-                        current -= frame_rate_num
-                    } else {
-                        current = 0
-                    }
-                }
-                Key::Down => current += frame_rate_num,
-                _ => (),
             }
-
-            if !self.rerender && current != *frame_write {
-                *frame_write = current;
-                self.rerender = true;
+            Key::Left => {
+                if current > 0 {
+                    current -= 1
+                } else {
+                    current = 0
+                }
             }
+            Key::Up => {
+                if current > frame_rate_num {
+                    current -= frame_rate_num
+                } else {
+                    current = 0
+                }
+            }
+            Key::Down => current += frame_rate_num,
+            _ => (),
+        }
+
+        if current > num_frames {
+            self.cur_frame_no = num_frames;
+        } else if !self.rerender && current != frame_write {
+            self.cur_frame_no = current;
+            self.rerender = true;
         }
     }
 
@@ -255,18 +299,17 @@ impl Previewer {
     }
 
     fn save_screenshot(&self) {
-        if let Ok(frame_write) = self.cur_frame_no.try_lock() {
-            let img = image::DynamicImage::ImageRgba8(self.cur_frame.to_owned()).to_rgb();
-            let mut save_path = self.script.get_script_dir();
+        let frame_write = self.cur_frame_no;
+        let img = image::DynamicImage::ImageRgba8(self.cur_frame.to_owned()).to_rgb();
+        let mut save_path = self.script.get_script_dir();
 
-            let screen_file = format!("vspreview-{}.png", frame_write);
-            save_path.push(screen_file);
+        let screen_file = format!("vspreview-{}.png", frame_write);
+        save_path.push(screen_file);
 
-            img.save_with_format(save_path, image::ImageFormat::Png)
-                .unwrap();
+        img.save_with_format(save_path, image::ImageFormat::Png)
+            .unwrap();
 
-            println!("Screenshot ");
-        }
+        println!("Screenshot ");
     }
 
     fn set_vertical_offset(&mut self, img_h: f64, draw_h: f64) {
