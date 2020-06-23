@@ -100,10 +100,10 @@ impl PreviewedScript {
         args.set_node("clip", &node).unwrap();
         args.set_int("format", RGB24_FORMAT as i64).unwrap();
 
-        if let Property::Constant(f) = node.info().format{
+        if let Property::Constant(f) = node.info().format {
             match f.color_family() {
                 ColorFamily::YUV => args.set_int("matrix_in", 1).unwrap(),
-            _   => (),
+                _ => (),
             }
         }
 
