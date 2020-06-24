@@ -13,9 +13,12 @@ pub struct Preview {
 }
 
 impl Preview {
-    pub fn new(window: &mut PistonWindow, script: &PreviewedScript, initial_frame: u32) -> Self {
-        let font = std::include_bytes!("../../assets/FiraSans-Regular.ttf");
-
+    pub fn new(
+        window: &mut PistonWindow,
+        script: &PreviewedScript,
+        initial_frame: u32,
+        font: conrod_core::text::Font,
+    ) -> Self {
         let cur_frame = script.get_frame(initial_frame);
 
         let mut texture_context = window.create_texture_context();
@@ -26,12 +29,11 @@ impl Preview {
         )
         .unwrap();
 
-        let glyphs = Glyphs::from_bytes(
+        let glyphs = Glyphs::from_font(
             font,
             window.create_texture_context(),
             TextureSettings::new(),
-        )
-        .unwrap();
+        );
 
         Self {
             cur_frame,
@@ -44,9 +46,20 @@ impl Preview {
     pub fn update(&mut self, image: ImageBuffer<Rgba<u8>, Vec<u8>>) {
         self.cur_frame = image;
 
-        self.texture
-            .update(&mut self.texture_context, &mut self.cur_frame)
-            .unwrap();
+        if self.texture.get_width() != self.cur_frame.width()
+            || self.texture.get_height() != self.cur_frame.height()
+        {
+            self.texture = G2dTexture::from_image(
+                &mut self.texture_context,
+                &self.cur_frame,
+                &TextureSettings::new().mag(texture::Filter::Nearest),
+            )
+            .unwrap()
+        } else {
+            self.texture
+                .update(&mut self.texture_context, &self.cur_frame)
+                .unwrap();
+        }
     }
 
     pub fn draw_image(
@@ -81,7 +94,7 @@ impl Preview {
 
         window.draw_2d(event, |context, graphics, device| {
             let transform = context.transform.trans(10.0, osd_y).zoom(0.5);
-            text::Text::new_color([0.85, 0.85, 0.85, 1.0], 32)
+            text::Text::new_color([0.7, 0.7, 0.7, 0.75], 48)
                 .draw(
                     &text,
                     &mut self.glyphs,

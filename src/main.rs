@@ -38,19 +38,18 @@ fn main() {
         .build()
         .unwrap();
 
-    //window.set_lazy(true);
-
-    let frame_no: u32 = 119;
-    let mut previewer = Previewer::new(&mut window, script, frame_no);
-
     // UI
-    let (width, height) = previewer.get_size();
-    let mut ui = conrod_core::UiBuilder::new([width as f64, height as f64]).build();
+    let mut ui = conrod_core::UiBuilder::new([WIDTH as f64, HEIGHT as f64]).build();
     let ids = Ids::new(ui.widget_id_generator());
 
-    ui.fonts
-        .insert_from_file(PathBuf::from("assets/FiraSans-Regular.ttf"))
-        .unwrap();
+    let font_bytes = include_bytes!("../assets/FiraSans-Regular.ttf");
+    let font = conrod_core::text::Font::from_bytes(&font_bytes[0..font_bytes.len()]).unwrap();
+
+    ui.fonts.insert(font.clone());
+
+    let frame_no: u32 = 0;
+    let mut previewer = Previewer::new(&mut window, script, frame_no, font);
+    let (width, height) = previewer.get_size();
 
     let mut texture_context = window.create_texture_context();
 
@@ -121,9 +120,9 @@ fn main() {
                 let pointer_width = -50.0 + (current_frame as f64 / max as f64) * slider_width;
 
                 if let Some(val) = widget::Slider::new(current_frame as f32, 0.0, max as f32)
-                    .mid_bottom_with_margin(35.0)
+                    .mid_bottom_with_margin(45.0)
                     .w_h(slider_width, 20.0)
-                    .rgba(0.7, 0.7, 0.7, 0.50)
+                    .rgba(0.7, 0.7, 0.7, 0.75)
                     .set(ids.slider, ui)
                 {
                     previewer.seek_to(val.into());

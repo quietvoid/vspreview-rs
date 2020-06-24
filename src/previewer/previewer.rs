@@ -24,12 +24,17 @@ pub struct Previewer {
 }
 
 impl Previewer {
-    pub fn new(window: &mut PistonWindow, script: PreviewedScript, initial_frame: u32) -> Self {
+    pub fn new(
+        window: &mut PistonWindow,
+        script: PreviewedScript,
+        initial_frame: u32,
+        font: conrod_core::text::Font,
+    ) -> Self {
         let zoom_factor = 1.0;
         let vertical_offset = 0.0;
         let horizontal_offset = 0.0;
 
-        let preview = Preview::new(window, &script, initial_frame);
+        let preview = Preview::new(window, &script, initial_frame, font);
         let window_size = required_window_size(&window, &preview);
 
         let previewer = Self {
@@ -236,10 +241,10 @@ impl Previewer {
         let screen_file = format!("vspreview-{}.png", frame_write);
         save_path.push(screen_file);
 
-        img.save_with_format(save_path, image::ImageFormat::Png)
+        img.save_with_format(&save_path, image::ImageFormat::Png)
             .unwrap();
 
-        println!("Screenshot ");
+        println!("Screenshot saved to {}", &save_path.to_str().unwrap());
     }
 
     fn set_vertical_offset(&mut self, img_h: f64, draw_h: f64) {
