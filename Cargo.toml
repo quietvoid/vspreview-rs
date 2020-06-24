@@ -3,6 +3,7 @@ name = "vspreview-rs"
 version = "0.1.0"
 authors = ["quietvoid"]
 edition = "2018"
+license = "GPL-3.0"
 
 [dependencies]
 piston_window = "0.109.0"
