@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use std::time::Instant;
 
 use itertools::izip;
 use vapoursynth::prelude::*;
@@ -84,8 +83,6 @@ impl PreviewedScript {
     }
 
     pub fn get_frame(&self, frame_no: u32) -> image::ImageBuffer<image::Rgba<u8>, Vec<u8>> {
-        let now = Instant::now();
-
         let env = &self.env;
         let mut node = env.get_output(0).unwrap().0;
 
@@ -117,8 +114,6 @@ impl PreviewedScript {
             frame.plane(1).unwrap(),
             frame.plane(2).unwrap(),
         );
-
-        //println!("Got frame in {}ms", now.elapsed().as_millis());
 
         self.to_rgba_buf(frame.resolution(0), r, g, b)
     }
