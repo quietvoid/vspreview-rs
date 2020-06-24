@@ -1,24 +1,21 @@
 extern crate image;
 extern crate piston_window;
 
+use super::preview::Preview;
 use super::previewed_script::PreviewedScript;
 
+use piston_window::*;
 use std::collections::HashSet;
 
-use image::{ImageBuffer, Rgba};
-use piston_window::*;
+use super::required_window_size;
 
 const MIN_ZOOM: f64 = 1.0;
 const MAX_ZOOM: f64 = 30.0;
 
 pub struct Previewer {
     script: PreviewedScript,
-    cur_frame: ImageBuffer<Rgba<u8>, Vec<u8>>,
+    preview: Preview,
     cur_frame_no: u32,
-
-    glyphs: Glyphs,
-    texture_context: G2dTextureContext,
-    texture: G2dTexture,
     zoom_factor: f64,
     vertical_offset: f64,
     horizontal_offset: f64,
@@ -28,36 +25,17 @@ pub struct Previewer {
 
 impl Previewer {
     pub fn new(window: &mut PistonWindow, script: PreviewedScript, initial_frame: u32) -> Self {
-        let font = std::include_bytes!("../assets/FiraSans-Regular.ttf");
-
         let zoom_factor = 1.0;
         let vertical_offset = 0.0;
         let horizontal_offset = 0.0;
 
-        let cur_frame = script.get_frame(initial_frame);
-
-        let mut texture_context = window.create_texture_context();
-        let image: G2dTexture = Texture::from_image(
-            &mut texture_context,
-            &cur_frame,
-            &TextureSettings::new().mag(texture::Filter::Nearest),
-        )
-        .unwrap();
-
-        let glyphs = Glyphs::from_bytes(
-            font,
-            window.create_texture_context(),
-            TextureSettings::new(),
-        )
-        .unwrap();
+        let preview = Preview::new(window, &script, initial_frame);
+        let window_size = required_window_size(&window, &preview);
 
         let previewer = Self {
             script,
-            cur_frame,
+            preview,
             cur_frame_no: initial_frame,
-            glyphs,
-            texture_context,
-            texture: image,
             zoom_factor,
             vertical_offset,
             horizontal_offset,
@@ -65,7 +43,6 @@ impl Previewer {
             rerender: true,
         };
 
-        let window_size = previewer.get_window_size(&window);
         window.set_size(window_size);
         window.set_title(format!(
             "VS Preview - Frame {}, Zoom: {:.0}x",
@@ -76,19 +53,7 @@ impl Previewer {
     }
 
     pub fn rerender(&mut self, window: &mut PistonWindow, event: &Event) {
-        let (dx, dy) = self.get_scaling(window);
-        let osd_y = (window.draw_size().height * dy) - 12.0;
-
         let frame_no = self.cur_frame_no;
-
-        if self.rerender {
-            self.cur_frame = self.script.get_frame(frame_no);
-            self.texture
-                .update(&mut self.texture_context, &self.cur_frame)
-                .unwrap();
-
-            self.rerender = false;
-        }
 
         window.set_title(format!(
             "VS Preview - Frame {}/{}, Zoom: {:.0}x",
@@ -97,35 +62,24 @@ impl Previewer {
             self.zoom_factor,
         ));
 
-        window.draw_2d(event, |c, g, device| {
-            clear([0.20; 4], g);
+        if self.rerender {
+            let image = self.script.get_frame(frame_no);
+            self.preview.update(image);
+            self.rerender = false;
+        }
 
-            let img_transform = c
-                .transform
-                .scale(dx, dy)
-                .trans(self.horizontal_offset, self.vertical_offset)
-                .zoom(self.zoom_factor);
+        self.preview.draw_image(
+            window,
+            event,
+            (self.horizontal_offset, self.vertical_offset),
+            self.zoom_factor,
+        );
 
-            piston_window::image(&self.texture, img_transform, g);
+        if self.show_osd() {
+            let text = self.script.get_summary();
 
-            if self.keys_pressed.contains(&Key::I) {
-                let transform = c.transform.trans(10.0, osd_y).zoom(0.5);
-                text::Text::new_color([0.85, 0.85, 0.85, 1.0], 32)
-                    .draw(
-                        self.script.get_summary(),
-                        &mut self.glyphs,
-                        &c.draw_state,
-                        transform,
-                        g,
-                    )
-                    .unwrap();
-
-                self.glyphs.factory.encoder.flush(device);
-            }
-
-            // Flush to GPU
-            self.texture_context.encoder.flush(device);
-        });
+            self.preview.draw_text(window, event, text);
+        }
     }
 
     pub fn handle_key_press(&mut self, window: &PistonWindow, key: &Key) {
@@ -185,8 +139,8 @@ impl Previewer {
         let change = ticks.last().unwrap();
 
         if self.keys_pressed.contains(&Key::LCtrl) {
-            let (img_w, draw_w) = (self.texture.get_width() as f64, window.draw_size().width);
-            let (img_h, draw_h) = (self.texture.get_height() as f64, window.draw_size().height);
+            let (img_w, draw_w) = (self.preview.get_width() as f64, window.draw_size().width);
+            let (img_h, draw_h) = (self.preview.get_height() as f64, window.draw_size().height);
 
             self.zoom_factor += change;
 
@@ -203,34 +157,6 @@ impl Previewer {
         } else {
             self.translate_vertically(window, *change);
         }
-    }
-
-    fn get_window_size(&self, window: &PistonWindow) -> Size {
-        let (dx, dy) = self.get_scaling(window);
-
-        let new_width = self.texture.get_width() as f64 * dx;
-        let new_height = self.texture.get_height() as f64 * dy;
-
-        Size::from((new_width, new_height))
-    }
-
-    fn get_scaling(&self, window: &PistonWindow) -> (f64, f64) {
-        let size = window.size();
-        let draw_size = window.draw_size();
-
-        let dx = size.width as f64 / draw_size.width as f64;
-        let dy = size.height as f64 / draw_size.height as f64;
-
-        (dx, dy)
-    }
-
-    fn fits_in_view(&self, window: &PistonWindow) -> bool {
-        let image_w = self.texture.get_width() as f64 * self.zoom_factor;
-        let image_h = self.texture.get_height() as f64 * self.zoom_factor;
-
-        let draw_size = window.draw_size();
-
-        draw_size.width >= image_w || draw_size.height >= image_h
     }
 
     fn reload_script(&mut self) {
@@ -283,9 +209,9 @@ impl Previewer {
     }
 
     fn translate_horizontally(&mut self, window: &PistonWindow, change: f64) {
-        let (img_w, draw_w) = (self.texture.get_width() as f64, window.draw_size().width);
+        let (img_w, draw_w) = (self.preview.get_width() as f64, window.draw_size().width);
 
-        if !self.fits_in_view(&window) {
+        if !self.preview.fits_in_view(&window, self.zoom_factor) {
             self.horizontal_offset += draw_w * change;
         }
 
@@ -293,9 +219,9 @@ impl Previewer {
     }
 
     fn translate_vertically(&mut self, window: &PistonWindow, change: f64) {
-        let (img_h, draw_h) = (self.texture.get_height() as f64, window.draw_size().height);
+        let (img_h, draw_h) = (self.preview.get_height() as f64, window.draw_size().height);
 
-        if !self.fits_in_view(&window) {
+        if !self.preview.fits_in_view(&window, self.zoom_factor) {
             self.vertical_offset += draw_h * change;
         }
 
@@ -304,7 +230,7 @@ impl Previewer {
 
     fn save_screenshot(&self) {
         let frame_write = self.cur_frame_no;
-        let img = image::DynamicImage::ImageRgba8(self.cur_frame.to_owned()).to_rgb();
+        let img = image::DynamicImage::ImageRgba8(self.preview.cloned_frame()).to_rgb();
         let mut save_path = self.script.get_script_dir();
 
         let screen_file = format!("vspreview-{}.png", frame_write);
@@ -342,5 +268,29 @@ impl Previewer {
         } else if self.horizontal_offset < max_off {
             self.horizontal_offset = max_off;
         }
+    }
+
+    pub fn get_size(&self) -> (u32, u32) {
+        (
+            self.preview.get_width() as u32,
+            self.preview.get_height() as u32,
+        )
+    }
+
+    pub fn get_current_no(&self) -> u32 {
+        self.cur_frame_no
+    }
+
+    pub fn get_clip_length(&self) -> u32 {
+        self.script.get_num_frames()
+    }
+
+    pub fn seek_to(&mut self, frame_no: f64) {
+        self.cur_frame_no = frame_no as u32;
+        self.rerender = true;
+    }
+
+    pub fn show_osd(&self) -> bool {
+        self.keys_pressed.contains(&Key::I)
     }
 }
