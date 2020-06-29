@@ -19,7 +19,10 @@ impl Preview {
         initial_frame: u32,
         font: conrod_core::text::Font,
     ) -> Self {
-        let cur_frame = script.get_frame(initial_frame);
+        let cur_frame = match script.get_frame(initial_frame) {
+            Some(frame) => frame,
+            None => ImageBuffer::new(0, 0),
+        };
 
         let mut texture_context = window.create_texture_context();
         let texture: G2dTexture = Texture::from_image(

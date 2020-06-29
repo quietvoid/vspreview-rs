@@ -50,72 +50,71 @@ impl PreviewedScript {
         let mut script_dir = script_path.clone();
         script_dir.pop();
 
-        let script_file = script_path.into_os_string().into_string().unwrap();
+        let script_file: String = script_path.into_os_string().into_string().unwrap();
 
-        let env = Environment::from_file(&script_file, EvalFlags::SetWorkingDir).unwrap();
-
-        let node = env.get_output(0).unwrap().0;
-        let info = node.info();
-
-        let summary = get_summary(info);
-
-        let (fr_num, fr_denom) = match info.framerate {
-            Property::Constant(fr) => (fr.numerator, fr.denominator),
-            Property::Variable => panic!("Only supports constant framerate!"),
-        };
-
-        Self {
-            env: Environment::from_file(&script_file, EvalFlags::SetWorkingDir).unwrap(),
+        let mut previewed_script = Self {
+            env: Environment::new().unwrap(),
             script_file,
             script_dir,
-            num_frames: info.num_frames as u32,
-            frame_rate_num: (fr_num as f64 / fr_denom as f64).ceil() as u32,
-            summary,
-        }
+            num_frames: 0,
+            frame_rate_num: 0,
+            summary: String::new(),
+        };
+
+        previewed_script.reload();
+
+        previewed_script
     }
 
     pub fn reload(&mut self) {
         let env = &mut self.env;
-        env.eval_file(&self.script_file, EvalFlags::SetWorkingDir)
-            .unwrap();
-
-        self.update_fields();
+        match env.eval_file(&self.script_file, EvalFlags::SetWorkingDir) {
+            Ok(_) => self.update_fields(),
+            Err(e) => println!("{:?}", e),
+        };
     }
 
-    pub fn get_frame(&self, frame_no: u32) -> image::ImageBuffer<image::Rgba<u8>, Vec<u8>> {
+    pub fn get_frame(&self, frame_no: u32) -> Option<image::ImageBuffer<image::Rgba<u8>, Vec<u8>>> {
         let env = &self.env;
-        let mut node = env.get_output(0).unwrap().0;
 
-        let resize_plugin = env
-            .get_core()
-            .unwrap()
-            .get_plugin_by_id("com.vapoursynth.resize")
-            .unwrap()
-            .unwrap();
-
-        let mut args = OwnedMap::new(API::get().unwrap());
-        args.set_node("clip", &node).unwrap();
-        args.set_int("format", RGB24_FORMAT as i64).unwrap();
-
-        if let Property::Constant(f) = node.info().format {
-            match f.color_family() {
-                ColorFamily::YUV => args.set_int("matrix_in", 1).unwrap(),
-                _ => (),
-            }
+        match env.get_output(0) {
+            Ok((mut node, _alpha)) => {
+                let resize_plugin = env
+                    .get_core()
+                    .unwrap()
+                    .get_plugin_by_id("com.vapoursynth.resize")
+                    .unwrap()
+                    .unwrap();
+    
+                let mut args = OwnedMap::new(API::get().unwrap());
+                args.set_node("clip", &node).unwrap();
+                args.set_int("format", RGB24_FORMAT as i64).unwrap();
+        
+                if let Property::Constant(f) = node.info().format {
+                    match f.color_family() {
+                        ColorFamily::YUV => args.set_int("matrix_in", 1).unwrap(),
+                        _ => (),
+                    }
+                }
+        
+                let rgb = resize_plugin.invoke("Point", &args).unwrap();
+                node = rgb.get_node("clip").unwrap();
+        
+                let frame = node.get_frame(frame_no as usize).unwrap();
+        
+                let (r, g, b): (&[u8], &[u8], &[u8]) = (
+                    frame.plane(0).unwrap(),
+                    frame.plane(1).unwrap(),
+                    frame.plane(2).unwrap(),
+                );
+        
+                Some(self.to_rgba_buf(frame.resolution(0), r, g, b))
+            },
+            Err(e) => {
+                println!("{:?}", e);
+                None
+            },
         }
-
-        let rgb = resize_plugin.invoke("Point", &args).unwrap();
-        node = rgb.get_node("clip").unwrap();
-
-        let frame = node.get_frame(frame_no as usize).unwrap();
-
-        let (r, g, b): (&[u8], &[u8], &[u8]) = (
-            frame.plane(0).unwrap(),
-            frame.plane(1).unwrap(),
-            frame.plane(2).unwrap(),
-        );
-
-        self.to_rgba_buf(frame.resolution(0), r, g, b)
     }
 
     fn to_rgba_buf(
@@ -158,17 +157,20 @@ impl PreviewedScript {
     fn update_fields(&mut self) {
         let env = &self.env;
 
-        let node = env.get_output(0).unwrap().0;
-        let info = node.info();
-
-        let (fr_num, fr_denom) = match info.framerate {
-            Property::Constant(fr) => (fr.numerator, fr.denominator),
-            Property::Variable => panic!("Only supports constant framerate!"),
+        match env.get_output(0) {
+            Ok((node, _alpha)) => {
+                let info = node.info();
+                let (fr_num, fr_denom) = match info.framerate {
+                    Property::Constant(fr) => (fr.numerator, fr.denominator),
+                    Property::Variable => panic!("Only supports constant framerate!"),
+                };
+        
+                self.num_frames = info.num_frames as u32;
+                self.frame_rate_num = (fr_num as f64 / fr_denom as f64).ceil() as u32;
+        
+                self.summary = get_summary(info);
+            },
+            Err(e) => println!("{:?}", e),
         };
-
-        self.num_frames = info.num_frames as u32;
-        self.frame_rate_num = (fr_num as f64 / fr_denom as f64).ceil() as u32;
-
-        self.summary = get_summary(info);
     }
 }

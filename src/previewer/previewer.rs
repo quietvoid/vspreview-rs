@@ -6,6 +6,7 @@ use super::previewed_script::PreviewedScript;
 
 use piston_window::*;
 use std::collections::HashSet;
+use super::image::ImageBuffer;
 
 use super::required_window_size;
 
@@ -68,8 +69,11 @@ impl Previewer {
         ));
 
         if self.rerender {
-            let image = self.script.get_frame(frame_no);
-            self.preview.update(image);
+            match self.script.get_frame(frame_no) {
+                Some(image) => self.preview.update(image),
+                None => self.preview.update(ImageBuffer::new(0, 0)),
+            };
+
             self.rerender = false;
         }
 
