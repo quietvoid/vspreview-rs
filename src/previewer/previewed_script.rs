@@ -97,7 +97,7 @@ impl PreviewedScript {
                     }
                 }
         
-                let rgb = resize_plugin.invoke("Point", &args).unwrap();
+                let rgb = resize_plugin.invoke("Spline16", &args).unwrap();
                 node = rgb.get_node("clip").unwrap();
         
                 let frame = node.get_frame(frame_no as usize).unwrap();
