@@ -85,35 +85,35 @@ impl PreviewedScript {
                     .get_plugin_by_id("com.vapoursynth.resize")
                     .unwrap()
                     .unwrap();
-    
+
                 let mut args = OwnedMap::new(API::get().unwrap());
                 args.set_node("clip", &node).unwrap();
                 args.set_int("format", RGB24_FORMAT as i64).unwrap();
-        
+
                 if let Property::Constant(f) = node.info().format {
                     match f.color_family() {
                         ColorFamily::YUV => args.set_int("matrix_in", 1).unwrap(),
                         _ => (),
                     }
                 }
-        
+
                 let rgb = resize_plugin.invoke("Spline16", &args).unwrap();
                 node = rgb.get_node("clip").unwrap();
-        
+
                 let frame = node.get_frame(frame_no as usize).unwrap();
-        
+
                 let (r, g, b): (&[u8], &[u8], &[u8]) = (
                     frame.plane(0).unwrap(),
                     frame.plane(1).unwrap(),
                     frame.plane(2).unwrap(),
                 );
-        
+
                 Some(self.to_rgba_buf(frame.resolution(0), r, g, b))
-            },
+            }
             Err(e) => {
                 println!("{:?}", e);
                 None
-            },
+            }
         }
     }
 
@@ -164,12 +164,12 @@ impl PreviewedScript {
                     Property::Constant(fr) => (fr.numerator, fr.denominator),
                     Property::Variable => panic!("Only supports constant framerate!"),
                 };
-        
+
                 self.num_frames = info.num_frames as u32;
                 self.frame_rate_num = (fr_num as f64 / fr_denom as f64).ceil() as u32;
-        
+
                 self.summary = get_summary(info);
-            },
+            }
             Err(e) => println!("{:?}", e),
         };
     }

@@ -4,9 +4,9 @@ extern crate piston_window;
 use super::preview::Preview;
 use super::previewed_script::PreviewedScript;
 
+use super::image::ImageBuffer;
 use piston_window::*;
 use std::collections::HashSet;
-use super::image::ImageBuffer;
 
 use super::required_window_size;
 
@@ -221,7 +221,7 @@ impl Previewer {
         let (img_w, draw_w) = (self.preview.get_width() as f64, window.draw_size().width);
 
         if !self.preview.fits_in_view(&window, self.zoom_factor) {
-            self.horizontal_offset += draw_w * change;
+            self.horizontal_offset += (draw_w / 2.5) * change;
         }
 
         self.set_horizontal_offset(img_w, draw_w);
@@ -231,7 +231,7 @@ impl Previewer {
         let (img_h, draw_h) = (self.preview.get_height() as f64, window.draw_size().height);
 
         if !self.preview.fits_in_view(&window, self.zoom_factor) {
-            self.vertical_offset += draw_h * change;
+            self.vertical_offset += (draw_h / 2.5) * change;
         }
 
         self.set_vertical_offset(img_h, draw_h);
