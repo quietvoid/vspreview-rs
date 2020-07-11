@@ -13,4 +13,7 @@ conrod_piston = { git = "https://github.com/pistondevelopers/conrod", rev = "f44
 image = "0.23.6"
 itertools = "0.9.0"
 structopt = "0.3.15"
+confy = "0.4.0"
+serde_derive = "*"
+serde = "*"
 vapoursynth = { version = "0.3.0", features = ["vapoursynth-api-36", "vapoursynth-functions", "vsscript-api-32", "vsscript-functions"] }

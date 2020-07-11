@@ -52,12 +52,11 @@ fn main() {
     let scaled_size = scaled_size(frame_size, dpi);
     let (window_width, window_height) = (scaled_size.width, scaled_size.height);
 
-    let frame_no: u32 = 0;
-    let mut previewer = Previewer::new(script, frame_no);
+    let mut previewer = Previewer::new(script);
 
     let opengl = OpenGL::V3_2;
     let mut window: PistonWindow = WindowSettings::new("VS Preview", scaled_size)
-        .exit_on_esc(true)
+        .exit_on_esc(false)
         .graphics_api(opengl)
         .build()
         .unwrap();
@@ -105,7 +104,7 @@ fn main() {
         match e {
             Event::Input(Input::Button(input), _opt) => match (input.button, input.state) {
                 (Button::Keyboard(k), ButtonState::Press) => {
-                    previewer.handle_key_press(&window, &k);
+                    previewer.handle_key_press(&mut window, &k);
                 }
                 (Button::Keyboard(k), ButtonState::Release) => {
                     previewer.handle_key_release(&k);
@@ -116,7 +115,10 @@ fn main() {
                 if let Motion::MouseScroll(ticks) = motion {
                     previewer.handle_mouse_scroll(&window, ticks);
                 }
-            }
+            },
+            Event::Input(Input::Close(_args), _opt ) => {
+                previewer.handle_window_close();
+            },
             Event::Loop(render) => {
                 if let Loop::Render(_ra) = render {
                     previewer.rerender(&mut window, &e);

@@ -8,6 +8,8 @@ use super::image::ImageBuffer;
 use piston_window::*;
 use std::collections::HashSet;
 
+use serde_derive::{Serialize, Deserialize};
+
 const MIN_ZOOM: f64 = 1.0;
 const MAX_ZOOM: f64 = 30.0;
 
@@ -22,18 +24,26 @@ pub struct Previewer {
     rerender: bool,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct Config {
+    last_frame: u32,
+}
+
+
 impl Previewer {
-    pub fn new(script: PreviewedScript, initial_frame: u32) -> Self {
+    pub fn new(script: PreviewedScript) -> Self {
         let zoom_factor = 1.0;
         let vertical_offset = 0.0;
         let horizontal_offset = 0.0;
 
-        let preview = Preview::new(&script, initial_frame);
+        let config: Config = confy::load("vspreview-rs").unwrap();
+
+        let preview = Preview::new(&script, config.last_frame);
 
         Self {
             script,
             preview,
-            cur_frame_no: initial_frame,
+            cur_frame_no: config.last_frame,
             zoom_factor,
             vertical_offset,
             horizontal_offset,
@@ -84,7 +94,7 @@ impl Previewer {
         }
     }
 
-    pub fn handle_key_press(&mut self, window: &PistonWindow, key: &Key) {
+    pub fn handle_key_press(&mut self, window: &mut piston_window::PistonWindow, key: &Key) {
         match key {
             Key::Right | Key::Left | Key::Down | Key::Up => self.seek(key),
             Key::F5 => {
@@ -123,7 +133,12 @@ impl Previewer {
                 } else {
                     self.keys_pressed.remove(key);
                 }
-            }
+            },
+            Key::Escape => {
+                self.handle_window_close();
+
+                window.set_should_close(true);
+            },
             _ => (),
         };
     }
@@ -159,6 +174,14 @@ impl Previewer {
         } else {
             self.translate_vertically(window, *change);
         }
+    }
+
+    pub fn handle_window_close(&mut self) {
+        // Save frame before closing
+        let mut config: Config = confy::load("vspreview-rs").unwrap();
+        config.last_frame = self.cur_frame_no;
+
+        confy::store("vspreview-rs", config).unwrap();
     }
 
     fn reload_script(&mut self) {
@@ -288,4 +311,8 @@ impl Previewer {
     pub fn show_osd(&self) -> bool {
         self.keys_pressed.contains(&Key::I)
     }
+}
+
+impl std::default::Default for Config {
+    fn default() -> Self { Self { last_frame: 0 } }
 }

@@ -11,6 +11,9 @@ Requires OpenGL, probably other stuff.
 `cargo run --release -- script.vpy`  
 `vspreview-rs script.vpy`  
 
+### Config
+Using `confy`, automatically saves the config to the user config directory.  
+
 ### Keybindings
 Seek 1 frame: Right, Left  
 Seek 1 second: Down, Up  
