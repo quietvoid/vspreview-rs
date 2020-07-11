@@ -7,7 +7,7 @@ extern crate conrod_piston;
 
 use std::path::PathBuf;
 
-use conrod_core::{color, widget, Colorable, Positionable, Sizeable, Widget};
+use conrod_core::{widget, Colorable, Positionable, Sizeable, Widget};
 use piston_window::texture::UpdateTexture;
 use piston_window::*;
 use structopt::StructOpt;
@@ -51,11 +51,12 @@ fn main() {
 
     let scaled_size = scaled_size(frame_size, dpi);
     let (window_width, window_height) = (scaled_size.width, scaled_size.height);
+    let scaled_ui = 150.0 / dpi;
 
     let mut previewer = Previewer::new(script);
 
     let opengl = OpenGL::V3_2;
-    let mut window: PistonWindow = WindowSettings::new("VS Preview", scaled_size)
+    let mut window: PistonWindow = WindowSettings::new("VS Preview", [window_width, window_height])
         .exit_on_esc(false)
         .graphics_api(opengl)
         .build()
@@ -65,13 +66,13 @@ fn main() {
     window.window.ctx.window().set_window_icon(icon);
 
     // Init preview with window now that it's created
-    previewer.initialize(&mut window, font.clone());
+    previewer.initialize(&mut window);
 
     // UI
     let mut ui = conrod_core::UiBuilder::new([window_width, window_height]).build();
     let ids = Ids::new(ui.widget_id_generator());
 
-    ui.fonts.insert(font.clone());
+    ui.fonts.insert(font);
 
     let mut texture_context = window.create_texture_context();
 
@@ -100,6 +101,8 @@ fn main() {
 
     let image_map = conrod_core::image::Map::new();
 
+    let mut script_info = previewer.get_script_info();
+
     while let Some(e) = window.next() {
         match e {
             Event::Input(Input::Button(input), _opt) => match (input.button, input.state) {
@@ -115,13 +118,17 @@ fn main() {
                 if let Motion::MouseScroll(ticks) = motion {
                     previewer.handle_mouse_scroll(&window, ticks);
                 }
-            },
-            Event::Input(Input::Close(_args), _opt ) => {
+            }
+            Event::Input(Input::Close(_args), _opt) => {
                 previewer.handle_window_close();
-            },
+            }
             Event::Loop(render) => {
                 if let Loop::Render(_ra) = render {
                     previewer.rerender(&mut window, &e);
+
+                    if previewer.show_osd() {
+                        script_info = previewer.get_script_info();
+                    }
                 };
             }
             _ => {}
@@ -141,7 +148,10 @@ fn main() {
                 let ui = &mut ui.set_widgets();
 
                 widget::Canvas::new()
-                    .color(color::TRANSPARENT)
+                    .rgba(0.25, 0.25, 0.25, 0.50)
+                    .mid_bottom()
+                    .w(win_w)
+                    .h(scaled_ui)
                     .set(ids.canvas, ui);
 
                 let current_frame = previewer.get_current_no();
@@ -150,19 +160,25 @@ fn main() {
                 let pointer_width = -50.0 + (current_frame as f64 / max as f64) * slider_width;
 
                 if let Some(val) = widget::Slider::new(current_frame as f32, 0.0, max as f32)
-                    .mid_bottom_with_margin(45.0)
+                    .mid_bottom_with_margin(55.0)
                     .w_h(slider_width, 20.0)
-                    .rgba(0.7, 0.7, 0.7, 0.75)
+                    .rgba(0.75, 0.75, 0.75, 1.00)
                     .set(ids.slider, ui)
                 {
                     previewer.seek_to(val.into());
                 }
 
                 widget::Text::new(&format!("{}", current_frame))
-                    .bottom_left_with_margins_on(ids.slider, 30.0, pointer_width)
-                    .rgba(0.7, 0.7, 0.7, 0.75)
+                    .bottom_left_with_margins_on(ids.slider, 25.0, pointer_width)
+                    .rgba(0.75, 0.75, 0.75, 1.00)
                     .font_size(32)
                     .set(ids.min_label, ui);
+
+                widget::Text::new(&script_info.to_string())
+                    .bottom_left_with_margins_on(ids.canvas, 15.0, 10.0)
+                    .rgba(0.75, 0.75, 0.75, 1.00)
+                    .font_size(26)
+                    .set(ids.frame_info, ui);
             });
 
             window.draw_2d(&e, |context, graphics, device| {
@@ -212,4 +228,4 @@ fn main() {
     }
 }
 
-widget_ids!(struct Ids { canvas, slider, min_label, max_label });
+widget_ids!(struct Ids { canvas, slider, min_label, frame_info });

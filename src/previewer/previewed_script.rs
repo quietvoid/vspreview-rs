@@ -17,7 +17,7 @@ pub struct PreviewedScript {
     script_info: ScriptInfo,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct ScriptInfo {
     num_frames: u32,
     width: u32,
@@ -157,10 +157,6 @@ impl PreviewedScript {
         self.script_dir.clone()
     }
 
-    pub fn get_summary(&self) -> String {
-        self.script_info.to_string()
-    }
-
     fn update_fields(&mut self) {
         let env = &self.env;
 
@@ -175,6 +171,10 @@ impl PreviewedScript {
     pub fn get_size(&self) -> Size {
         let script_info = &self.script_info;
         Size::from((script_info.width, script_info.height))
+    }
+
+    pub fn get_script_info(&self) -> ScriptInfo {
+        self.script_info.clone()
     }
 }
 

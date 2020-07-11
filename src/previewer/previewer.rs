@@ -2,13 +2,13 @@ extern crate image;
 extern crate piston_window;
 
 use super::preview::Preview;
-use super::previewed_script::PreviewedScript;
+use super::previewed_script::{PreviewedScript, ScriptInfo};
 
 use super::image::ImageBuffer;
 use piston_window::*;
 use std::collections::HashSet;
 
-use serde_derive::{Serialize, Deserialize};
+use serde_derive::{Deserialize, Serialize};
 
 const MIN_ZOOM: f64 = 1.0;
 const MAX_ZOOM: f64 = 30.0;
@@ -28,7 +28,6 @@ pub struct Previewer {
 struct Config {
     last_frame: u32,
 }
-
 
 impl Previewer {
     pub fn new(script: PreviewedScript) -> Self {
@@ -52,8 +51,8 @@ impl Previewer {
         }
     }
 
-    pub fn initialize(&mut self, window: &mut PistonWindow, font: conrod_core::text::Font) {
-        self.preview.initialize(window, font);
+    pub fn initialize(&mut self, window: &mut PistonWindow) {
+        self.preview.initialize(window);
         self.update_window_title(window);
     }
 
@@ -86,12 +85,6 @@ impl Previewer {
             (self.horizontal_offset, self.vertical_offset),
             self.zoom_factor,
         );
-
-        if self.show_osd() {
-            let text = self.script.get_summary();
-
-            self.preview.draw_text(window, event, &text);
-        }
     }
 
     pub fn handle_key_press(&mut self, window: &mut piston_window::PistonWindow, key: &Key) {
@@ -133,12 +126,12 @@ impl Previewer {
                 } else {
                     self.keys_pressed.remove(key);
                 }
-            },
+            }
             Key::Escape => {
                 self.handle_window_close();
 
                 window.set_should_close(true);
-            },
+            }
             _ => (),
         };
     }
@@ -311,8 +304,14 @@ impl Previewer {
     pub fn show_osd(&self) -> bool {
         self.keys_pressed.contains(&Key::I)
     }
+
+    pub fn get_script_info(&self) -> ScriptInfo {
+        self.script.get_script_info()
+    }
 }
 
 impl std::default::Default for Config {
-    fn default() -> Self { Self { last_frame: 0 } }
+    fn default() -> Self {
+        Self { last_frame: 0 }
+    }
 }

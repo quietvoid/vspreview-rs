@@ -7,7 +7,6 @@ use piston_window::*;
 
 pub struct Preview {
     cur_frame: ImageBuffer<Rgba<u8>, Vec<u8>>,
-    glyphs: Option<Glyphs>,
     texture_context: Option<G2dTextureContext>,
     texture: Option<G2dTexture>,
 }
@@ -21,13 +20,12 @@ impl Preview {
 
         Self {
             cur_frame,
-            glyphs: None,
             texture_context: None,
             texture: None,
         }
     }
 
-    pub fn initialize(&mut self, window: &mut PistonWindow, font: conrod_core::text::Font) {
+    pub fn initialize(&mut self, window: &mut PistonWindow) {
         let mut texture_context = window.create_texture_context();
         let texture: G2dTexture = Texture::from_image(
             &mut texture_context,
@@ -36,15 +34,8 @@ impl Preview {
         )
         .unwrap();
 
-        let glyphs = Glyphs::from_font(
-            font,
-            window.create_texture_context(),
-            TextureSettings::new(),
-        );
-
         self.texture_context = Some(texture_context);
         self.texture = Some(texture);
-        self.glyphs = Some(glyphs);
     }
 
     pub fn update(&mut self, image: ImageBuffer<Rgba<u8>, Vec<u8>>) {
@@ -93,26 +84,6 @@ impl Preview {
 
             // Flush to GPU
             self.texture_context.as_mut().unwrap().encoder.flush(device);
-        });
-    }
-
-    pub fn draw_text(&mut self, window: &mut PistonWindow, event: &Event, text: &str) {
-        let (_dx, dy) = get_scaling(window);
-        let osd_y = (window.draw_size().height * dy) - 12.0;
-
-        window.draw_2d(event, |context, graphics, device| {
-            let transform = context.transform.trans(10.0, osd_y).zoom(0.5);
-            text::Text::new_color([0.7, 0.7, 0.7, 0.75], 48)
-                .draw(
-                    &text,
-                    self.glyphs.as_mut().unwrap(),
-                    &context.draw_state,
-                    transform,
-                    graphics,
-                )
-                .unwrap();
-
-            self.glyphs.as_mut().unwrap().factory.encoder.flush(device);
         });
     }
 
