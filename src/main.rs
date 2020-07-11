@@ -7,7 +7,7 @@ extern crate conrod_piston;
 
 use std::path::PathBuf;
 
-use conrod_core::{widget, Colorable, Positionable, Sizeable, Widget};
+use conrod_core::{widget, Colorable, Positionable, Sizeable, Widget, Borderable};
 use piston_window::texture::UpdateTexture;
 use piston_window::*;
 use structopt::StructOpt;
@@ -148,10 +148,11 @@ fn main() {
                 let ui = &mut ui.set_widgets();
 
                 widget::Canvas::new()
-                    .rgba(0.25, 0.25, 0.25, 0.50)
                     .mid_bottom()
                     .w(win_w)
                     .h(scaled_ui)
+                    .color(conrod_core::color::TRANSPARENT)
+                    .border(0.0)
                     .set(ids.canvas, ui);
 
                 let current_frame = previewer.get_current_no();
@@ -169,7 +170,7 @@ fn main() {
                 }
 
                 widget::Text::new(&format!("{}", current_frame))
-                    .bottom_left_with_margins_on(ids.slider, 25.0, pointer_width)
+                    .bottom_left_with_margins_on(ids.slider, 20.0, pointer_width)
                     .rgba(0.75, 0.75, 0.75, 1.00)
                     .font_size(32)
                     .set(ids.min_label, ui);
