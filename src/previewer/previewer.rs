@@ -8,8 +8,6 @@ use super::image::ImageBuffer;
 use piston_window::*;
 use std::collections::HashSet;
 
-use super::required_window_size;
-
 const MIN_ZOOM: f64 = 1.0;
 const MAX_ZOOM: f64 = 30.0;
 
@@ -25,20 +23,14 @@ pub struct Previewer {
 }
 
 impl Previewer {
-    pub fn new(
-        window: &mut PistonWindow,
-        script: PreviewedScript,
-        initial_frame: u32,
-        font: conrod_core::text::Font,
-    ) -> Self {
+    pub fn new(script: PreviewedScript, initial_frame: u32) -> Self {
         let zoom_factor = 1.0;
         let vertical_offset = 0.0;
         let horizontal_offset = 0.0;
 
-        let preview = Preview::new(window, &script, initial_frame, font);
-        let window_size = required_window_size(&window, &preview);
+        let preview = Preview::new(&script, initial_frame);
 
-        let previewer = Self {
+        Self {
             script,
             preview,
             cur_frame_no: initial_frame,
@@ -47,26 +39,27 @@ impl Previewer {
             horizontal_offset,
             keys_pressed: HashSet::new(),
             rerender: true,
-        };
+        }
+    }
 
-        window.set_size(window_size);
+    pub fn initialize(&mut self, window: &mut PistonWindow, font: conrod_core::text::Font) {
+        self.preview.initialize(window, font);
+        self.update_window_title(window);
+    }
+
+    pub fn update_window_title(&self, window: &mut PistonWindow) {
         window.set_title(format!(
-            "VS Preview - Frame {}, Zoom: {:.0}x",
-            initial_frame, zoom_factor
+            "VS Preview - Frame {}/{}, Zoom: {:.0}x",
+            self.cur_frame_no,
+            self.script.get_num_frames(),
+            self.zoom_factor,
         ));
-
-        previewer
     }
 
     pub fn rerender(&mut self, window: &mut PistonWindow, event: &Event) {
         let frame_no = self.cur_frame_no;
 
-        window.set_title(format!(
-            "VS Preview - Frame {}/{}, Zoom: {:.0}x",
-            frame_no,
-            self.script.get_num_frames(),
-            self.zoom_factor,
-        ));
+        self.update_window_title(window);
 
         if self.rerender {
             match self.script.get_frame(frame_no) {
@@ -87,7 +80,7 @@ impl Previewer {
         if self.show_osd() {
             let text = self.script.get_summary();
 
-            self.preview.draw_text(window, event, text);
+            self.preview.draw_text(window, event, &text);
         }
     }
 
@@ -277,13 +270,6 @@ impl Previewer {
         } else if self.horizontal_offset < max_off {
             self.horizontal_offset = max_off;
         }
-    }
-
-    pub fn get_size(&self) -> (u32, u32) {
-        (
-            self.preview.get_width() as u32,
-            self.preview.get_height() as u32,
-        )
     }
 
     pub fn get_current_no(&self) -> u32 {

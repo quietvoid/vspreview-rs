@@ -1,3 +1,4 @@
+use std::fmt;
 use std::path::PathBuf;
 
 use itertools::izip;
@@ -5,20 +6,31 @@ use vapoursynth::prelude::*;
 use vapoursynth::video_info::Resolution;
 use vapoursynth::video_info::VideoInfo;
 
+use piston_window::Size;
+
 const RGB24_FORMAT: i32 = PresetFormat::RGB24 as i32;
 
 pub struct PreviewedScript {
     env: Environment,
     script_file: String,
     script_dir: PathBuf,
-    num_frames: u32,
-    frame_rate_num: u32,
-    summary: String,
+    script_info: ScriptInfo,
 }
 
-fn get_summary(info: VideoInfo) -> String {
+#[derive(Default)]
+pub struct ScriptInfo {
+    num_frames: u32,
+    width: u32,
+    height: u32,
+    fr_num: u32,
+    fr_denom: u32,
+    framerate: u32,
+    format_name: String,
+}
+
+fn get_script_info(info: VideoInfo) -> ScriptInfo {
     let (width, height) = match info.resolution {
-        Property::Constant(r) => (r.width, r.height),
+        Property::Constant(r) => (r.width as u32, r.height as u32),
         Property::Variable => panic!("Only supports constant resolution!"),
     };
     let format = match info.format {
@@ -27,22 +39,19 @@ fn get_summary(info: VideoInfo) -> String {
     };
 
     let (fr_num, fr_denom) = match info.framerate {
-        Property::Constant(fr) => (fr.numerator, fr.denominator),
+        Property::Constant(fr) => (fr.numerator as u32, fr.denominator as u32),
         Property::Variable => panic!("Only supports constant framerate!"),
     };
 
-    let summary = format!(
-        "Frames: {} | Size: {}x{} | FPS: {}/{} = {:.3} | Format: {}",
-        info.num_frames,
+    ScriptInfo {
+        num_frames: info.num_frames as u32,
         width,
         height,
         fr_num,
         fr_denom,
-        (fr_num as f32 / fr_denom as f32),
-        format.name(),
-    );
-
-    summary
+        framerate: (fr_num as f64 / fr_denom as f64).ceil() as u32,
+        format_name: String::from(format.name()),
+    }
 }
 
 impl PreviewedScript {
@@ -56,9 +65,7 @@ impl PreviewedScript {
             env: Environment::new().unwrap(),
             script_file,
             script_dir,
-            num_frames: 0,
-            frame_rate_num: 0,
-            summary: String::new(),
+            script_info: ScriptInfo::default(),
         };
 
         previewed_script.reload();
@@ -139,19 +146,19 @@ impl PreviewedScript {
     }
 
     pub fn get_num_frames(&self) -> u32 {
-        self.num_frames
+        self.script_info.num_frames
     }
 
     pub fn get_frame_rate(&self) -> u32 {
-        self.frame_rate_num
+        self.script_info.framerate
     }
 
     pub fn get_script_dir(&self) -> PathBuf {
         self.script_dir.clone()
     }
 
-    pub fn get_summary(&self) -> &str {
-        &self.summary
+    pub fn get_summary(&self) -> String {
+        self.script_info.to_string()
     }
 
     fn update_fields(&mut self) {
@@ -159,18 +166,30 @@ impl PreviewedScript {
 
         match env.get_output(0) {
             Ok((node, _alpha)) => {
-                let info = node.info();
-                let (fr_num, fr_denom) = match info.framerate {
-                    Property::Constant(fr) => (fr.numerator, fr.denominator),
-                    Property::Variable => panic!("Only supports constant framerate!"),
-                };
-
-                self.num_frames = info.num_frames as u32;
-                self.frame_rate_num = (fr_num as f64 / fr_denom as f64).ceil() as u32;
-
-                self.summary = get_summary(info);
+                self.script_info = get_script_info(node.info());
             }
             Err(e) => println!("{:?}", e),
         };
+    }
+
+    pub fn get_size(&self) -> Size {
+        let script_info = &self.script_info;
+        Size::from((script_info.width, script_info.height))
+    }
+}
+
+impl fmt::Display for ScriptInfo {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Frames: {} | Size: {}x{} | FPS: {}/{} = {:.3} | Format: {}",
+            self.num_frames,
+            self.width,
+            self.height,
+            self.fr_num,
+            self.fr_denom,
+            (self.fr_num as f32 / self.fr_denom as f32),
+            self.format_name
+        )
     }
 }

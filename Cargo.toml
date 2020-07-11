@@ -6,6 +6,7 @@ edition = "2018"
 license = "GPL-3.0"
 
 [dependencies]
+glutin = "*"
 piston_window = "0.109.0"
 conrod_core = { git = "https://github.com/pistondevelopers/conrod", rev = "f448487" }
 conrod_piston = { git = "https://github.com/pistondevelopers/conrod", rev = "f448487" }

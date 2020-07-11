@@ -7,27 +7,31 @@ use piston_window::*;
 
 pub struct Preview {
     cur_frame: ImageBuffer<Rgba<u8>, Vec<u8>>,
-    glyphs: Glyphs,
-    texture_context: G2dTextureContext,
-    texture: G2dTexture,
+    glyphs: Option<Glyphs>,
+    texture_context: Option<G2dTextureContext>,
+    texture: Option<G2dTexture>,
 }
 
 impl Preview {
-    pub fn new(
-        window: &mut PistonWindow,
-        script: &PreviewedScript,
-        initial_frame: u32,
-        font: conrod_core::text::Font,
-    ) -> Self {
+    pub fn new(script: &PreviewedScript, initial_frame: u32) -> Self {
         let cur_frame = match script.get_frame(initial_frame) {
             Some(frame) => frame,
             None => ImageBuffer::new(0, 0),
         };
 
+        Self {
+            cur_frame,
+            glyphs: None,
+            texture_context: None,
+            texture: None,
+        }
+    }
+
+    pub fn initialize(&mut self, window: &mut PistonWindow, font: conrod_core::text::Font) {
         let mut texture_context = window.create_texture_context();
         let texture: G2dTexture = Texture::from_image(
             &mut texture_context,
-            &cur_frame,
+            &self.cur_frame,
             &TextureSettings::new().mag(texture::Filter::Nearest),
         )
         .unwrap();
@@ -38,31 +42,32 @@ impl Preview {
             TextureSettings::new(),
         );
 
-        Self {
-            cur_frame,
-            glyphs,
-            texture_context,
-            texture,
-        }
+        self.texture_context = Some(texture_context);
+        self.texture = Some(texture);
+        self.glyphs = Some(glyphs);
     }
 
     pub fn update(&mut self, image: ImageBuffer<Rgba<u8>, Vec<u8>>) {
         self.cur_frame = image;
+        let texture = self.texture.as_mut().unwrap();
+        let mut texture_context = self.texture_context.as_mut().unwrap();
 
-        if self.texture.get_width() != self.cur_frame.width()
-            || self.texture.get_height() != self.cur_frame.height()
+        if texture.get_width() != self.cur_frame.width()
+            || texture.get_height() != self.cur_frame.height()
         {
-            self.texture = G2dTexture::from_image(
-                &mut self.texture_context,
+            *texture = G2dTexture::from_image(
+                &mut texture_context,
                 &self.cur_frame,
                 &TextureSettings::new().mag(texture::Filter::Nearest),
             )
             .unwrap()
         } else {
-            self.texture
-                .update(&mut self.texture_context, &self.cur_frame)
+            texture
+                .update(&mut texture_context, &self.cur_frame)
                 .unwrap();
         }
+
+        self.texture = Some(texture.to_owned());
     }
 
     pub fn draw_image(
@@ -84,10 +89,10 @@ impl Preview {
                 .trans(horizontal_offset, vertical_offset)
                 .zoom(zoom_factor);
 
-            piston_window::image(&self.texture, img_transform, graphics);
+            piston_window::image(self.texture.as_ref().unwrap(), img_transform, graphics);
 
             // Flush to GPU
-            self.texture_context.encoder.flush(device);
+            self.texture_context.as_mut().unwrap().encoder.flush(device);
         });
     }
 
@@ -100,14 +105,14 @@ impl Preview {
             text::Text::new_color([0.7, 0.7, 0.7, 0.75], 48)
                 .draw(
                     &text,
-                    &mut self.glyphs,
+                    self.glyphs.as_mut().unwrap(),
                     &context.draw_state,
                     transform,
                     graphics,
                 )
                 .unwrap();
 
-            self.glyphs.factory.encoder.flush(device);
+            self.glyphs.as_mut().unwrap().factory.encoder.flush(device);
         });
     }
 
@@ -121,11 +126,11 @@ impl Preview {
     }
 
     pub fn get_width(&self) -> f64 {
-        self.texture.get_width() as f64
+        self.texture.as_ref().unwrap().get_width() as f64
     }
 
     pub fn get_height(&self) -> f64 {
-        self.texture.get_height() as f64
+        self.texture.as_ref().unwrap().get_height() as f64
     }
 
     pub fn cloned_frame(&self) -> ImageBuffer<Rgba<u8>, Vec<u8>> {

@@ -14,7 +14,8 @@ use structopt::StructOpt;
 
 mod previewer;
 
-use previewer::{PreviewedScript, Previewer};
+use image::ImageFormat;
+use previewer::{scaled_size, PreviewedScript, Previewer};
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "vspreview-rs", about = "Vapoursynth script previewer")]
@@ -24,49 +25,76 @@ struct Opt {
 }
 
 fn main() {
-    const WIDTH: u32 = 800;
-    const HEIGHT: u32 = 600;
+    // Icon
+    let icon_bytes = include_bytes!("../assets/icon.png");
+    let icon_img = image::load_from_memory_with_format(icon_bytes, ImageFormat::Png)
+        .expect("loading icon")
+        .to_rgba();
+    let (icon_width, icon_height) = icon_img.dimensions();
+    let icon = Some(glutin::Icon::from_rgba(icon_img.into_raw(), icon_width, icon_height).unwrap());
+
+    // Font
+    let font_bytes = include_bytes!("../assets/FiraSans-Regular.ttf");
+    let font = conrod_core::text::Font::from_bytes(&font_bytes[0..font_bytes.len()]).unwrap();
 
     let opt = Opt::from_args();
 
+    // Get the DPI of the primary display
+    let dpi = glutin::EventsLoop::new()
+        .get_primary_monitor()
+        .get_hidpi_factor();
+
+    // Load script to get frame dimensions
     let script = PreviewedScript::new(opt.input);
+    let frame_size = script.get_size();
+    let (frame_width, frame_height) = (frame_size.width as u32, frame_size.height as u32);
+
+    let scaled_size = scaled_size(frame_size, dpi);
+    let (window_width, window_height) = (scaled_size.width, scaled_size.height);
+
+    let frame_no: u32 = 0;
+    let mut previewer = Previewer::new(script, frame_no);
 
     let opengl = OpenGL::V3_2;
-    let mut window: PistonWindow = WindowSettings::new("VS Preview", [WIDTH, HEIGHT])
+    let mut window: PistonWindow = WindowSettings::new("VS Preview", scaled_size)
         .exit_on_esc(true)
         .graphics_api(opengl)
         .build()
         .unwrap();
 
+    // ?? Set icon
+    window.window.ctx.window().set_window_icon(icon);
+
+    // Init preview with window now that it's created
+    previewer.initialize(&mut window, font.clone());
+
     // UI
-    let mut ui = conrod_core::UiBuilder::new([WIDTH as f64, HEIGHT as f64]).build();
+    let mut ui = conrod_core::UiBuilder::new([window_width, window_height]).build();
     let ids = Ids::new(ui.widget_id_generator());
 
-    let font_bytes = include_bytes!("../assets/FiraSans-Regular.ttf");
-    let font = conrod_core::text::Font::from_bytes(&font_bytes[0..font_bytes.len()]).unwrap();
-
     ui.fonts.insert(font.clone());
-
-    let frame_no: u32 = 0;
-    let mut previewer = Previewer::new(&mut window, script, frame_no, font);
-    let (width, height) = previewer.get_size();
 
     let mut texture_context = window.create_texture_context();
 
     let mut text_vertex_data = Vec::new();
     let (mut texture_cache, mut glyph_cache) = {
         let cache = conrod_core::text::GlyphCache::builder()
-            .dimensions(width, height)
+            .dimensions(frame_width, frame_height)
             .scale_tolerance(0.1)
             .position_tolerance(0.1)
             .build();
 
-        let buffer_len = width as usize * height as usize;
+        let buffer_len = frame_width as usize * frame_height as usize;
         let init = vec![128; buffer_len];
         let settings = TextureSettings::new();
-        let texture =
-            G2dTexture::from_memory_alpha(&mut texture_context, &init, width, height, &settings)
-                .unwrap();
+        let texture = G2dTexture::from_memory_alpha(
+            &mut texture_context,
+            &init,
+            frame_width as u32,
+            frame_height as u32,
+            &settings,
+        )
+        .unwrap();
 
         (texture, cache)
     };
