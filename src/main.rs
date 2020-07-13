@@ -7,7 +7,6 @@ extern crate conrod_piston;
 
 use std::path::PathBuf;
 
-use conrod_core::{widget, Colorable, Positionable, Sizeable, Widget, Borderable};
 use piston_window::texture::UpdateTexture;
 use piston_window::*;
 use structopt::StructOpt;
@@ -15,7 +14,7 @@ use structopt::StructOpt;
 mod previewer;
 
 use image::ImageFormat;
-use previewer::{scaled_size, PreviewedScript, Previewer};
+use previewer::{scaled_size, PreviewedScript, Previewer, preview_ui};
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "vspreview-rs", about = "Vapoursynth script previewer")]
@@ -51,7 +50,6 @@ fn main() {
 
     let scaled_size = scaled_size(frame_size, dpi);
     let (window_width, window_height) = (scaled_size.width, scaled_size.height);
-    let scaled_ui = 150.0 / dpi;
 
     let mut previewer = Previewer::new(script);
 
@@ -70,7 +68,7 @@ fn main() {
 
     // UI
     let mut ui = conrod_core::UiBuilder::new([window_width, window_height]).build();
-    let ids = Ids::new(ui.widget_id_generator());
+    let ids = preview_ui::Ids::new(ui.widget_id_generator());
 
     ui.fonts.insert(font);
 
@@ -101,13 +99,17 @@ fn main() {
 
     let image_map = conrod_core::image::Map::new();
 
+    let mut preview_ui = preview_ui::PreviewUi::new(previewer.get_current_no().to_string(), 150.0 / dpi);
+
     let mut script_info = previewer.get_script_info();
 
     while let Some(e) = window.next() {
+
+        // TODO: Make the image canvas a conrod widget to avoid handling events twice
         match e {
             Event::Input(Input::Button(input), _opt) => match (input.button, input.state) {
                 (Button::Keyboard(k), ButtonState::Press) => {
-                    previewer.handle_key_press(&mut window, &k);
+                    previewer.handle_key_press(&mut window, &k, &mut preview_ui);
                 }
                 (Button::Keyboard(k), ButtonState::Release) => {
                     previewer.handle_key_release(&k);
@@ -134,52 +136,21 @@ fn main() {
             _ => {}
         };
 
-        let size = window.size();
-        let (win_w, win_h) = (
-            size.width as conrod_core::Scalar,
-            size.height as conrod_core::Scalar,
-        );
-        if let Some(e) = conrod_piston::event::convert(e.clone(), win_w, win_h) {
-            ui.handle_event(e);
-        }
-
         if previewer.show_osd() {
+            let size = window.size();
+            let (win_w, win_h) = (
+                size.width as conrod_core::Scalar,
+                size.height as conrod_core::Scalar,
+            );
+
+            if let Some(e) = conrod_piston::event::convert(e.clone(), win_w, win_h) {
+                ui.handle_event(e);
+            }
+
             e.update(|_| {
                 let ui = &mut ui.set_widgets();
 
-                widget::Canvas::new()
-                    .mid_bottom()
-                    .w(win_w)
-                    .h(scaled_ui)
-                    .color(conrod_core::color::TRANSPARENT)
-                    .border(0.0)
-                    .set(ids.canvas, ui);
-
-                let current_frame = previewer.get_current_no();
-                let max = previewer.get_clip_length();
-                let slider_width = size.width / 1.5;
-                let pointer_width = -50.0 + (current_frame as f64 / max as f64) * slider_width;
-
-                if let Some(val) = widget::Slider::new(current_frame as f32, 0.0, max as f32)
-                    .mid_bottom_with_margin(55.0)
-                    .w_h(slider_width, 20.0)
-                    .rgba(0.75, 0.75, 0.75, 1.00)
-                    .set(ids.slider, ui)
-                {
-                    previewer.seek_to(val.into());
-                }
-
-                widget::Text::new(&format!("{}", current_frame))
-                    .bottom_left_with_margins_on(ids.slider, 20.0, pointer_width)
-                    .rgba(0.75, 0.75, 0.75, 1.00)
-                    .font_size(32)
-                    .set(ids.min_label, ui);
-
-                widget::Text::new(&script_info.to_string())
-                    .bottom_left_with_margins_on(ids.canvas, 15.0, 10.0)
-                    .rgba(0.75, 0.75, 0.75, 1.00)
-                    .font_size(26)
-                    .set(ids.frame_info, ui);
+                preview_ui.gui(ui, &ids, &mut previewer, &script_info.to_string(), win_w);
             });
 
             window.draw_2d(&e, |context, graphics, device| {
@@ -228,5 +199,3 @@ fn main() {
         }
     }
 }
-
-widget_ids!(struct Ids { canvas, slider, min_label, frame_info });

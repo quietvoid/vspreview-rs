@@ -3,6 +3,7 @@ extern crate piston_window;
 
 use super::preview::Preview;
 use super::previewed_script::{PreviewedScript, ScriptInfo};
+use super::preview_ui::PreviewUi;
 
 use super::image::ImageBuffer;
 use piston_window::*;
@@ -87,9 +88,12 @@ impl Previewer {
         );
     }
 
-    pub fn handle_key_press(&mut self, window: &mut piston_window::PistonWindow, key: &Key) {
+    pub fn handle_key_press(&mut self, window: &mut piston_window::PistonWindow, key: &Key, preview_ui: &mut PreviewUi) {
         match key {
-            Key::Right | Key::Left | Key::Down | Key::Up => self.seek(key),
+            Key::Right | Key::Left | Key::Down | Key::Up => {
+                self.seek(key);
+                preview_ui.update_frame(self.cur_frame_no.to_string());
+            },
             Key::F5 => {
                 self.reload_script();
                 let new_max_frames = self.script.get_num_frames();
