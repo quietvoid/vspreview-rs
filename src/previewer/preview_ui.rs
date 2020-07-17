@@ -1,17 +1,17 @@
-use super::Previewer;
+use super::{Previewer, number_box};
+use number_box::NumberBox;
 
 use conrod_core::{UiCell, widget, color, Colorable, Positionable, Sizeable, Widget, Borderable};
-use conrod_core::widget::text_box;
 
 pub struct PreviewUi {
-    text_box_value: String,
+    number_box_value: String,
     scaled_ui: f64,
 }
 
 impl PreviewUi {
-    pub fn new(text_box_value: String, scaled_ui: f64) -> Self {
+    pub fn new(number_box_value: String, scaled_ui: f64) -> Self {
         Self {
-            text_box_value,
+            number_box_value,
             scaled_ui,
         }
     }
@@ -37,7 +37,9 @@ impl PreviewUi {
             .rgba(0.75, 0.75, 0.75, 1.00)
             .set(ids.slider, ui)
         {
-            previewer.seek_to(val.into());
+            let num = val as u32;
+            previewer.seek_to(num);
+            self.number_box_value = num.to_string();
         }
     
         widget::Text::new(&current_frame.to_string())
@@ -52,7 +54,7 @@ impl PreviewUi {
             .font_size(26)
             .set(ids.frame_info, ui);
     
-        for event in widget::TextBox::new(&self.text_box_value)
+        for event in NumberBox::new(&self.number_box_value)
             .bottom_left_with_margins_on(ids.canvas, 40.0, 10.0)
             .rgba(0.25, 0.25, 0.25, 0.5)
             .w(70.0)
@@ -62,24 +64,22 @@ impl PreviewUi {
             .set(ids.frame_no_box, ui)
         {
             match event {
-                text_box::Event::Update(s) => self.text_box_value = s,
-                text_box::Event::Enter => {
-                    // Only allow seeking to numeric strings
-                    if let Ok(frame_no) = self.text_box_value.parse::<u32>() {
-                        if frame_no > max {
-                            self.text_box_value = max.to_string();
-                        } else {
-                            previewer.seek_to(frame_no as f64);
-                            self.text_box_value = frame_no.to_string();
-                        }
+                number_box::Event::Update(s) => self.number_box_value = s,
+                number_box::Event::Enter => if let Ok(number) = self.number_box_value.parse::<u32>() {
+                    if number > max {
+                        self.number_box_value = max.to_string();
+                    } else {
+                        previewer.seek_to(number);
                     }
-                }
+                },
+                number_box::Event::Click => previewer.unfocus(),
+                number_box::Event::Unfocus => previewer.focus(),
             };
         }
     }
 
     pub fn update_frame(&mut self, frame_no: String) {
-        self.text_box_value = frame_no;
+        self.number_box_value = frame_no;
     }
 }
 

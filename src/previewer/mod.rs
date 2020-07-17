@@ -12,6 +12,8 @@ pub use preview::Preview;
 pub use previewed_script::PreviewedScript;
 pub use previewer::Previewer;
 
+pub(crate) use super::custom_widgets::number_box;
+
 pub fn get_scaling(window: &PistonWindow) -> (f64, f64) {
     let size = window.size();
     let draw_size = window.draw_size();

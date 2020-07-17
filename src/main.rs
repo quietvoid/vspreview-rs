@@ -5,6 +5,8 @@ extern crate piston_window;
 extern crate conrod_core;
 extern crate conrod_piston;
 
+#[macro_use] extern crate conrod_derive;
+
 use std::path::PathBuf;
 
 use piston_window::texture::UpdateTexture;
@@ -12,6 +14,7 @@ use piston_window::*;
 use structopt::StructOpt;
 
 mod previewer;
+mod custom_widgets;
 
 use image::ImageFormat;
 use previewer::{scaled_size, PreviewedScript, Previewer, preview_ui};

@@ -229,7 +229,7 @@ name = "conrod_core"
 version = "0.70.0"
 source = "git+https://github.com/pistondevelopers/conrod?rev=f448487#f448487aa4eab91a214634717ca9d7ad1298ef5e"
 dependencies = [
- "conrod_derive",
+ "conrod_derive 0.70.0 (git+https://github.com/pistondevelopers/conrod?rev=f448487)",
  "copypasta",
  "daggy",
  "fnv",
@@ -243,6 +243,17 @@ dependencies = [
 name = "conrod_derive"
 version = "0.70.0"
 source = "git+https://github.com/pistondevelopers/conrod?rev=f448487#f448487aa4eab91a214634717ca9d7ad1298ef5e"
+dependencies = [
+ "proc-macro2 1.0.18",
+ "quote 1.0.7",
+ "syn",
+]
+
+[[package]]
+name = "conrod_derive"
+version = "0.70.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3608c2b51dfdd85355b113113d35118d9b0629bafc72b0d3e163239e5576728"
 dependencies = [
  "proc-macro2 1.0.18",
  "quote 1.0.7",
@@ -1712,6 +1723,7 @@ version = "0.1.0"
 dependencies = [
  "confy",
  "conrod_core",
+ "conrod_derive 0.70.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "conrod_piston",
  "glutin",
  "image",

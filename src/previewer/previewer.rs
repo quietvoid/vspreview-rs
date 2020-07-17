@@ -23,6 +23,7 @@ pub struct Previewer {
     horizontal_offset: f64,
     keys_pressed: HashSet<Key>,
     rerender: bool,
+    focused: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -49,6 +50,7 @@ impl Previewer {
             horizontal_offset,
             keys_pressed: HashSet::new(),
             rerender: true,
+            focused: true,
         }
     }
 
@@ -89,12 +91,16 @@ impl Previewer {
     }
 
     pub fn handle_key_press(&mut self, window: &mut piston_window::PistonWindow, key: &Key, preview_ui: &mut PreviewUi) {
+        if !self.focused {
+            return;
+        }
+
         match key {
             Key::Right | Key::Left | Key::Down | Key::Up => {
                 self.seek(key);
                 preview_ui.update_frame(self.cur_frame_no.to_string());
             },
-            Key::F5 => {
+            Key::F5 | Key::R => {
                 self.reload_script();
                 let new_max_frames = self.script.get_num_frames();
 
@@ -300,8 +306,8 @@ impl Previewer {
         self.script.get_num_frames()
     }
 
-    pub fn seek_to(&mut self, frame_no: f64) {
-        self.cur_frame_no = frame_no as u32;
+    pub fn seek_to(&mut self, frame_no: u32) {
+        self.cur_frame_no = frame_no;
         self.rerender = true;
     }
 
@@ -311,6 +317,14 @@ impl Previewer {
 
     pub fn get_script_info(&self) -> ScriptInfo {
         self.script.get_script_info()
+    }
+
+    pub fn focus(&mut self) {
+        self.focused = true;
+    }
+
+    pub fn unfocus(&mut self) {
+        self.focused = false;
     }
 }
 

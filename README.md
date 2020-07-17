@@ -23,6 +23,8 @@ Zoom: Ctrl + Scroll
 Scroll horizontally: Home/End, Shift + Scroll  
 Scroll vertically: PageUp/PageDown, Scroll  
 
+Reload script: F5, R
+
 Show OSD info: I (toggle)  
 Take a screenshot: S (saves to script directory)  
 Close: Escape  
