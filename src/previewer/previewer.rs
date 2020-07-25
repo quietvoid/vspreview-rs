@@ -96,7 +96,7 @@ impl Previewer {
         }
 
         match key {
-            Key::Right | Key::Left | Key::Down | Key::Up => {
+            Key::Right | Key::Left | Key::Down | Key::Up | Key::H | Key::J | Key::K | Key::L => {
                 self.seek(key);
                 preview_ui.update_frame(self.cur_frame_no.to_string());
             },
@@ -137,7 +137,7 @@ impl Previewer {
                     self.keys_pressed.remove(key);
                 }
             }
-            Key::Escape => {
+            Key::Escape | Key::Q => {
                 self.handle_window_close();
 
                 window.set_should_close(true);
@@ -202,28 +202,28 @@ impl Previewer {
             let frame_rate_num = script.get_frame_rate();
 
             match key {
-                Key::Right => {
+                Key::Right | Key::L => {
                     if current < num_frames {
                         current += 1
                     } else {
                         current = num_frames
                     }
                 }
-                Key::Left => {
+                Key::Left | Key::H => {
                     if current > 0 {
                         current -= 1
                     } else {
                         current = 0
                     }
                 }
-                Key::Up => {
+                Key::Up | Key::K => {
                     if current > frame_rate_num {
                         current -= frame_rate_num
                     } else {
                         current = 0
                     }
                 }
-                Key::Down => current += frame_rate_num,
+                Key::Down | Key::J => current += frame_rate_num,
                 _ => (),
             }
 

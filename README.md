@@ -18,6 +18,8 @@ Using `confy`, automatically saves the config to the user config directory.
 Seek 1 frame: Right, Left  
 Seek 1 second: Down, Up  
 
+Alternative seeking: H, J, K, L  
+
 Zoom: Ctrl + Scroll  
 
 Scroll horizontally: Home/End, Shift + Scroll  
@@ -27,4 +29,4 @@ Reload script: F5, R
 
 Show OSD info: I (toggle)  
 Take a screenshot: S (saves to script directory)  
-Close: Escape  
+Close: Escape, Q  
