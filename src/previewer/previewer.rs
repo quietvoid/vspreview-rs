@@ -38,13 +38,19 @@ impl Previewer {
         let horizontal_offset = 0.0;
 
         let config: Config = confy::load("vspreview-rs").unwrap();
+        let mut cur_frame  = config.last_frame;
+        let max_frames = script.get_num_frames();
 
-        let preview = Preview::new(&script, config.last_frame);
+        if cur_frame > max_frames {
+            cur_frame = max_frames;
+        }
+
+        let preview = Preview::new(&script, cur_frame);
 
         Self {
             script,
             preview,
-            cur_frame_no: config.last_frame,
+            cur_frame_no: cur_frame,
             zoom_factor,
             vertical_offset,
             horizontal_offset,
@@ -239,7 +245,7 @@ impl Previewer {
     fn translate_horizontally(&mut self, window: &PistonWindow, change: f64) {
         let (img_w, draw_w) = (self.preview.get_width() as f64, window.draw_size().width);
 
-        if !self.preview.fits_in_view(&window, self.zoom_factor) {
+        if !self.preview.fits_in_view(&window, self.zoom_factor, true) {
             self.horizontal_offset += (draw_w / 2.5) * change;
         }
 
@@ -249,7 +255,8 @@ impl Previewer {
     fn translate_vertically(&mut self, window: &PistonWindow, change: f64) {
         let (img_h, draw_h) = (self.preview.get_height() as f64, window.draw_size().height);
 
-        if !self.preview.fits_in_view(&window, self.zoom_factor) {
+        if !self.preview.fits_in_view(&window, self.zoom_factor, false) {
+            println!("{}", self.vertical_offset);
             self.vertical_offset += (draw_h / 2.5) * change;
         }
 

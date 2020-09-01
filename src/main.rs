@@ -139,17 +139,17 @@ fn main() {
             _ => {}
         };
 
+        let size = window.size();
+        let (win_w, win_h) = (
+            size.width as conrod_core::Scalar,
+            size.height as conrod_core::Scalar,
+        );
+
+        if let Some(e) = conrod_piston::event::convert(e.clone(), win_w, win_h) {
+            ui.handle_event(e);
+        }
+
         if previewer.show_osd() {
-            let size = window.size();
-            let (win_w, win_h) = (
-                size.width as conrod_core::Scalar,
-                size.height as conrod_core::Scalar,
-            );
-
-            if let Some(e) = conrod_piston::event::convert(e.clone(), win_w, win_h) {
-                ui.handle_event(e);
-            }
-
             e.update(|_| {
                 let ui = &mut ui.set_widgets();
 

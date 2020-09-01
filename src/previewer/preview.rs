@@ -87,13 +87,17 @@ impl Preview {
         });
     }
 
-    pub fn fits_in_view(&self, window: &PistonWindow, zoom_factor: f64) -> bool {
+    pub fn fits_in_view(&self, window: &PistonWindow, zoom_factor: f64, horizontally: bool) -> bool {
         let image_w = self.get_width() * zoom_factor;
         let image_h = self.get_height() as f64 * zoom_factor;
 
         let draw_size = window.draw_size();
 
-        draw_size.width >= image_w || draw_size.height >= image_h
+        if horizontally {
+            draw_size.width >= image_w
+        } else {
+            draw_size.height >= image_h
+        }
     }
 
     pub fn get_width(&self) -> f64 {
