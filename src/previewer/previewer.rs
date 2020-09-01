@@ -256,7 +256,6 @@ impl Previewer {
         let (img_h, draw_h) = (self.preview.get_height() as f64, window.draw_size().height);
 
         if !self.preview.fits_in_view(&window, self.zoom_factor, false) {
-            println!("{}", self.vertical_offset);
             self.vertical_offset += (draw_h / 2.5) * change;
         }
 
