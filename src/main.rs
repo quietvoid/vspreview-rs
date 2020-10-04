@@ -16,8 +16,9 @@ use structopt::StructOpt;
 mod previewer;
 mod custom_widgets;
 
-use image::ImageFormat;
 use previewer::{scaled_size, PreviewedScript, Previewer, preview_ui};
+
+use glutin::event_loop::EventLoop;
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "vspreview-rs", about = "Vapoursynth script previewer")]
@@ -27,13 +28,14 @@ struct Opt {
 }
 
 fn main() {
-    // Icon
-    let icon_bytes = include_bytes!("../assets/icon.png");
-    let icon_img = image::load_from_memory_with_format(icon_bytes, ImageFormat::Png)
-        .expect("loading icon")
-        .to_rgba();
-    let (icon_width, icon_height) = icon_img.dimensions();
-    let icon = Some(glutin::Icon::from_rgba(icon_img.into_raw(), icon_width, icon_height).unwrap());
+    /* Icon
+        let icon_bytes = include_bytes!("../assets/icon.png");
+        let icon_img = image::load_from_memory_with_format(icon_bytes, ImageFormat::Png)
+            .expect("loading icon")
+            .to_rgba();
+        let (icon_width, icon_height) = icon_img.dimensions();
+        let icon = Some(Icon::from_rgba(icon_img.into_raw(), icon_width, icon_height).unwrap());
+    */
 
     // Font
     let font_bytes = include_bytes!("../assets/FiraSans-Regular.ttf");
@@ -42,9 +44,9 @@ fn main() {
     let opt = Opt::from_args();
 
     // Get the DPI of the primary display
-    let dpi = glutin::EventsLoop::new()
-        .get_primary_monitor()
-        .get_hidpi_factor();
+    let dpi = EventLoop::new()
+        .primary_monitor().unwrap()
+        .scale_factor();
 
     // Load script to get frame dimensions
     let script = PreviewedScript::new(opt.input);
@@ -64,7 +66,7 @@ fn main() {
         .unwrap();
 
     // ?? Set icon
-    window.window.ctx.window().set_window_icon(icon);
+    //window.window.ctx.window().set_window_icon(icon);
 
     // Init preview with window now that it's created
     previewer.initialize(&mut window);
