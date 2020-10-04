@@ -5,7 +5,8 @@ extern crate piston_window;
 extern crate conrod_core;
 extern crate conrod_piston;
 
-#[macro_use] extern crate conrod_derive;
+#[macro_use]
+extern crate conrod_derive;
 
 use std::path::PathBuf;
 
@@ -13,10 +14,10 @@ use piston_window::texture::UpdateTexture;
 use piston_window::*;
 use structopt::StructOpt;
 
-mod previewer;
 mod custom_widgets;
+mod previewer;
 
-use previewer::{scaled_size, PreviewedScript, Previewer, preview_ui};
+use previewer::{preview_ui, scaled_size, PreviewedScript, Previewer};
 
 use glutin::event_loop::EventLoop;
 
@@ -44,9 +45,7 @@ fn main() {
     let opt = Opt::from_args();
 
     // Get the DPI of the primary display
-    let dpi = EventLoop::new()
-        .primary_monitor().unwrap()
-        .scale_factor();
+    let dpi = EventLoop::new().primary_monitor().unwrap().scale_factor();
 
     // Load script to get frame dimensions
     let script = PreviewedScript::new(opt.input);
@@ -104,12 +103,12 @@ fn main() {
 
     let image_map = conrod_core::image::Map::new();
 
-    let mut preview_ui = preview_ui::PreviewUi::new(previewer.get_current_no().to_string(), 150.0 / dpi);
+    let mut preview_ui =
+        preview_ui::PreviewUi::new(previewer.get_current_no().to_string(), 150.0 / dpi);
 
     let mut script_info = previewer.get_script_info();
 
     while let Some(e) = window.next() {
-
         // TODO: Make the image canvas a conrod widget to avoid handling events twice
         match e {
             Event::Input(Input::Button(input), _opt) => match (input.button, input.state) {

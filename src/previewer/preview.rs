@@ -87,7 +87,12 @@ impl Preview {
         });
     }
 
-    pub fn fits_in_view(&self, window: &PistonWindow, zoom_factor: f64, horizontally: bool) -> bool {
+    pub fn fits_in_view(
+        &self,
+        window: &PistonWindow,
+        zoom_factor: f64,
+        horizontally: bool,
+    ) -> bool {
         let image_w = self.get_width() * zoom_factor;
         let image_h = self.get_height() as f64 * zoom_factor;
 

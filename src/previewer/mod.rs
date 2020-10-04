@@ -1,7 +1,7 @@
 mod preview;
+pub mod preview_ui;
 mod previewed_script;
 mod previewer;
-pub mod preview_ui;
 
 use super::image;
 use super::piston_window;

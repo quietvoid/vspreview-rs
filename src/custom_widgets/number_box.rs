@@ -24,13 +24,12 @@
 //! From https://github.com/PistonDevelopers/conrod/blob/master/conrod_core/src/widget/text_box.rs
 //! Renamed and modified.
 
-
-use conrod_core::{Color, Colorable, FontSize, Borderable, Positionable, Sizeable, Widget};
 use conrod_core::event;
 use conrod_core::input;
 use conrod_core::position::{Range, Rect, Scalar};
 use conrod_core::text;
 use conrod_core::widget;
+use conrod_core::{Borderable, Color, Colorable, FontSize, Positionable, Sizeable, Widget};
 
 /// A widget for displaying and mutating a small, one-line field of text, given by the user in the
 /// form of a `String`.
@@ -89,7 +88,6 @@ pub struct State {
 }
 
 impl<'a> NumberBox<'a> {
-
     /// Construct a NumberBox widget.
     pub fn new(number: &'a str) -> Self {
         NumberBox {
@@ -104,13 +102,12 @@ impl<'a> NumberBox<'a> {
         self.justify(text::Justify::Right)
     }
 
-    builder_methods!{
+    builder_methods! {
         pub text_color { style.text_color = Some(Color) }
         pub font_size { style.font_size = Some(FontSize) }
         pub justify { style.justify = Some(text::Justify) }
         pub pad_text { style.text_padding = Some(Scalar) }
     }
-
 }
 
 /// Events produced by the `NumberBox`.
@@ -141,7 +138,14 @@ impl<'a> Widget for NumberBox<'a> {
 
     /// Update the state of the TextEdit.
     fn update(self, args: widget::UpdateArgs<Self>) -> Self::Event {
-        let widget::UpdateArgs { id, state, rect, style, ui, .. } = args;
+        let widget::UpdateArgs {
+            id,
+            state,
+            rect,
+            style,
+            ui,
+            ..
+        } = args;
         let NumberBox { number, .. } = self;
 
         let font_size = style.font_size(ui.theme());
@@ -208,18 +212,17 @@ impl<'a> Widget for NumberBox<'a> {
                 event::Widget::UncapturesInputSource(s) => match s {
                     input::Source::Keyboard => events.push(Event::Unfocus),
                     _ => (),
-                }
+                },
                 _ => (),
             }
         }
 
         events
     }
-
 }
 
 impl<'a> Borderable for NumberBox<'a> {
-    builder_methods!{
+    builder_methods! {
         border { style.border = Some(Scalar) }
         border_color { style.border_color = Some(Color) }
     }

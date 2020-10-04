@@ -2,8 +2,8 @@ extern crate image;
 extern crate piston_window;
 
 use super::preview::Preview;
-use super::previewed_script::{PreviewedScript, ScriptInfo};
 use super::preview_ui::PreviewUi;
+use super::previewed_script::{PreviewedScript, ScriptInfo};
 
 use super::image::ImageBuffer;
 use piston_window::*;
@@ -38,7 +38,7 @@ impl Previewer {
         let horizontal_offset = 0.0;
 
         let config: Config = confy::load("vspreview-rs").unwrap();
-        let mut cur_frame  = config.last_frame;
+        let mut cur_frame = config.last_frame;
         let max_frames = script.get_num_frames();
 
         if cur_frame > max_frames {
@@ -67,7 +67,7 @@ impl Previewer {
 
     pub fn update_window_title(&self, window: &mut PistonWindow) {
         window.set_title(format!(
-            "VS Preview - Frame {}/{}, Zoom: {:.0}x",
+            "VS Preview - Frame {}/{}, Zoom: {:.1}x",
             self.cur_frame_no,
             self.script.get_num_frames(),
             self.zoom_factor,
@@ -96,7 +96,12 @@ impl Previewer {
         );
     }
 
-    pub fn handle_key_press(&mut self, window: &mut piston_window::PistonWindow, key: &Key, preview_ui: &mut PreviewUi) {
+    pub fn handle_key_press(
+        &mut self,
+        window: &mut piston_window::PistonWindow,
+        key: &Key,
+        preview_ui: &mut PreviewUi,
+    ) {
         if !self.focused {
             return;
         }
@@ -105,7 +110,7 @@ impl Previewer {
             Key::Right | Key::Left | Key::Down | Key::Up | Key::H | Key::J | Key::K | Key::L => {
                 self.seek(key);
                 preview_ui.update_frame(self.cur_frame_no.to_string());
-            },
+            }
             Key::F5 | Key::R => {
                 self.reload_script();
                 let new_max_frames = self.script.get_num_frames();
@@ -148,6 +153,11 @@ impl Previewer {
 
                 window.set_should_close(true);
             }
+            Key::NumPadMinus | Key::Equals => match key {
+                Key::NumPadMinus => self.update_zoom_factor(window, -0.1),
+                Key::Equals => self.update_zoom_factor(window, 0.1),
+                _ => (),
+            },
             _ => (),
         };
     }
@@ -163,26 +173,7 @@ impl Previewer {
 
     pub fn handle_mouse_scroll(&mut self, window: &PistonWindow, ticks: [f64; 2]) {
         let change = ticks.last().unwrap();
-
-        if self.keys_pressed.contains(&Key::LCtrl) {
-            let (img_w, draw_w) = (self.preview.get_width() as f64, window.draw_size().width);
-            let (img_h, draw_h) = (self.preview.get_height() as f64, window.draw_size().height);
-
-            self.zoom_factor += change;
-
-            if self.zoom_factor < MIN_ZOOM {
-                self.zoom_factor = MIN_ZOOM;
-            } else if self.zoom_factor > MAX_ZOOM {
-                self.zoom_factor = MAX_ZOOM;
-            }
-
-            self.set_vertical_offset(img_h, draw_h);
-            self.set_horizontal_offset(img_w, draw_w);
-        } else if self.keys_pressed.contains(&Key::LShift) {
-            self.translate_horizontally(window, *change);
-        } else {
-            self.translate_vertically(window, *change);
-        }
+        self.update_zoom_factor(window, *change);
     }
 
     pub fn handle_window_close(&mut self) {
@@ -301,6 +292,28 @@ impl Previewer {
             self.horizontal_offset = 0.0;
         } else if self.horizontal_offset < max_off {
             self.horizontal_offset = max_off;
+        }
+    }
+
+    fn update_zoom_factor(&mut self, window: &PistonWindow, change: f64) {
+        if self.keys_pressed.contains(&Key::LCtrl) {
+            let (img_w, draw_w) = (self.preview.get_width() as f64, window.draw_size().width);
+            let (img_h, draw_h) = (self.preview.get_height() as f64, window.draw_size().height);
+
+            self.zoom_factor += change;
+
+            if self.zoom_factor < MIN_ZOOM {
+                self.zoom_factor = MIN_ZOOM;
+            } else if self.zoom_factor > MAX_ZOOM {
+                self.zoom_factor = MAX_ZOOM;
+            }
+
+            self.set_vertical_offset(img_h, draw_h);
+            self.set_horizontal_offset(img_w, draw_w);
+        } else if self.keys_pressed.contains(&Key::LShift) {
+            self.translate_horizontally(window, change);
+        } else {
+            self.translate_vertically(window, change);
         }
     }
 

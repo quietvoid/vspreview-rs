@@ -21,6 +21,7 @@ Seek 1 second: Down, Up
 Alternative seeking: H, J, K, L  
 
 Zoom: Ctrl + Scroll  
+Ctrl and +/- for 0.1 zoom increment
 
 Scroll horizontally: Home/End, Shift + Scroll  
 Scroll vertically: PageUp/PageDown, Scroll  
