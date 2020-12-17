@@ -327,7 +327,8 @@ dependencies = [
 [[package]]
 name = "conrod_derive"
 version = "0.70.0"
-source = "git+https://github.com/pistondevelopers/conrod?rev=31a08c8#31a08c83b957374a6ed365da5397da41cea6654d"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3608c2b51dfdd85355b113113d35118d9b0629bafc72b0d3e163239e5576728"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.7",
@@ -337,8 +338,7 @@ dependencies = [
 [[package]]
 name = "conrod_derive"
 version = "0.70.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3608c2b51dfdd85355b113113d35118d9b0629bafc72b0d3e163239e5576728"
+source = "git+https://github.com/pistondevelopers/conrod?rev=31a08c8#31a08c83b957374a6ed365da5397da41cea6654d"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.7",

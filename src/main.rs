@@ -44,8 +44,12 @@ fn main() {
 
     let opt = Opt::from_args();
 
-    // Get the DPI of the primary display
-    let dpi = EventLoop::new().primary_monitor().unwrap().scale_factor();
+    // Get the DPI of the primary display or not
+    let evt_loop = EventLoop::new();
+    let dpi = match evt_loop.primary_monitor() {
+        Some(monitor) => monitor.scale_factor(),
+        None => 1.00,
+    };
 
     // Load script to get frame dimensions
     let script = PreviewedScript::new(opt.input);
