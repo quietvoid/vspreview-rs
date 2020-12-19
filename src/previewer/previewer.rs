@@ -32,7 +32,7 @@ struct Config {
 }
 
 impl Previewer {
-    pub fn new(script: PreviewedScript) -> Self {
+    pub fn new(script: PreviewedScript, is_wayland: bool) -> Self {
         let zoom_factor = 1.0;
         let vertical_offset = 0.0;
         let horizontal_offset = 0.0;
@@ -45,7 +45,7 @@ impl Previewer {
             cur_frame = max_frames;
         }
 
-        let preview = Preview::new(&script, cur_frame);
+        let preview = Preview::new(&script, cur_frame, is_wayland);
 
         Self {
             script,

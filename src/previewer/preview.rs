@@ -9,10 +9,11 @@ pub struct Preview {
     cur_frame: ImageBuffer<Rgba<u8>, Vec<u8>>,
     texture_context: Option<G2dTextureContext>,
     texture: Option<G2dTexture>,
+    is_wayland: bool,
 }
 
 impl Preview {
-    pub fn new(script: &PreviewedScript, initial_frame: u32) -> Self {
+    pub fn new(script: &PreviewedScript, initial_frame: u32, is_wayland: bool,) -> Self {
         let cur_frame = match script.get_frame(initial_frame) {
             Some(frame) => frame,
             None => ImageBuffer::new(0, 0),
@@ -22,6 +23,7 @@ impl Preview {
             cur_frame,
             texture_context: None,
             texture: None,
+            is_wayland,
         }
     }
 
@@ -69,7 +71,23 @@ impl Preview {
         zoom_factor: f64,
     ) {
         let (dx, dy) = get_scaling(window);
-        let (horizontal_offset, vertical_offset) = offsets;
+        let (horizontal_offset, mut vertical_offset) = offsets;
+
+        let draw_size = window.draw_size();
+        let (draw_w, draw_h) = (draw_size.width, draw_size.height);
+
+        if self.is_wayland {
+            let texture = self.texture.as_ref().unwrap();
+            let image_h = texture.get_height() as f64;
+
+            let voffset = if image_h > draw_h {
+                image_h - draw_h
+            } else {
+                draw_h - image_h
+            };
+
+            vertical_offset += voffset;
+        }
 
         window.draw_2d(event, |context, graphics, device| {
             clear([0.2, 0.2, 0.2, 1.0], graphics);
@@ -80,7 +98,10 @@ impl Preview {
                 .trans(horizontal_offset, vertical_offset)
                 .zoom(zoom_factor);
 
-            piston_window::image(self.texture.as_ref().unwrap(), img_transform, graphics);
+            let mut draw_state = DrawState::default();
+            draw_state = draw_state.scissor([0, 0, draw_w as u32, draw_h as u32]);
+
+            Image::new().draw(self.texture.as_ref().unwrap(), &draw_state, img_transform, graphics);
 
             // Flush to GPU
             self.texture_context.as_mut().unwrap().encoder.flush(device);

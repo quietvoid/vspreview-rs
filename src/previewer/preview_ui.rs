@@ -23,6 +23,7 @@ impl PreviewUi {
         previewer: &mut Previewer,
         script_info: &str,
         window_width: f64,
+        image_width: f64,
     ) {
         widget::Canvas::new()
             .mid_bottom()
@@ -35,13 +36,14 @@ impl PreviewUi {
         let current_frame = previewer.get_current_no();
 
         let max = previewer.get_clip_length();
-        let slider_width = window_width / 1.5;
+        let slider_width = image_width / 1.5;
         let pointer_width = -50.0 + (current_frame as f64 / max as f64) * slider_width;
 
         if let Some(val) = widget::Slider::new(current_frame as f32, 0.0, max as f32)
-            .mid_bottom_with_margin(55.0)
+            .bottom_left_with_margins_on(ids.canvas, 42.5, 95.0)
             .w_h(slider_width, 20.0)
             .rgba(0.75, 0.75, 0.75, 1.00)
+            .border_rgba(0.15, 0.15, 0.15, 0.75)
             .set(ids.slider, ui)
         {
             let num = val as u32;

@@ -169,8 +169,7 @@ impl PreviewedScript {
     }
 
     pub fn get_size(&self) -> Size {
-        let script_info = &self.script_info;
-        Size::from((script_info.width, script_info.height))
+        self.script_info.get_size()
     }
 
     pub fn get_script_info(&self) -> ScriptInfo {
@@ -191,5 +190,11 @@ impl fmt::Display for ScriptInfo {
             (self.fr_num as f32 / self.fr_denom as f32),
             self.format_name
         )
+    }
+}
+
+impl ScriptInfo {
+    pub fn get_size(&self) -> Size {
+        Size::from((self.width, self.height))
     }
 }

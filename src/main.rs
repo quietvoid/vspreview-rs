@@ -19,7 +19,7 @@ mod previewer;
 
 use previewer::{preview_ui, scaled_size, PreviewedScript, Previewer};
 
-use glutin::event_loop::EventLoop;
+use glutin::{event_loop::EventLoop, platform::unix::EventLoopWindowTargetExtUnix};
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "vspreview-rs", about = "Vapoursynth script previewer")]
@@ -46,6 +46,8 @@ fn main() {
 
     // Get the DPI of the primary display or not
     let evt_loop = EventLoop::new();
+    let is_wayland = evt_loop.is_wayland();
+
     let dpi = match evt_loop.primary_monitor() {
         Some(monitor) => monitor.scale_factor(),
         None => 1.00,
@@ -59,7 +61,7 @@ fn main() {
     let scaled_size = scaled_size(frame_size, dpi);
     let (window_width, window_height) = (scaled_size.width, scaled_size.height);
 
-    let mut previewer = Previewer::new(script);
+    let mut previewer = Previewer::new(script, is_wayland);
 
     let opengl = OpenGL::V3_2;
     let mut window: PistonWindow = WindowSettings::new("VS Preview", [window_width, window_height])
@@ -110,7 +112,7 @@ fn main() {
     let mut preview_ui =
         preview_ui::PreviewUi::new(previewer.get_current_no().to_string(), 150.0 / dpi);
 
-    let mut script_info = previewer.get_script_info();
+    let mut script_info;
 
     while let Some(e) = window.next() {
         // TODO: Make the image canvas a conrod widget to avoid handling events twice
@@ -135,22 +137,31 @@ fn main() {
             Event::Loop(render) => {
                 if let Loop::Render(_ra) = render {
                     previewer.rerender(&mut window, &e);
-
-                    if previewer.show_osd() {
-                        script_info = previewer.get_script_info();
-                    }
                 };
             }
             _ => {}
         };
 
-        let size = window.size();
+        let w_size = window.draw_size();
         let (win_w, win_h) = (
-            size.width as conrod_core::Scalar,
-            size.height as conrod_core::Scalar,
+            w_size.width as conrod_core::Scalar,
+            w_size.height as conrod_core::Scalar
         );
 
-        if let Some(e) = conrod_piston::event::convert(e.clone(), win_w, win_h) {
+        script_info = previewer.get_script_info();
+        let img_size = script_info.get_size();
+
+        let voffset = if is_wayland {
+            if img_size.height > win_h {
+                img_size.height - win_h
+            } else {
+                win_h - img_size.height
+            }
+        } else {
+            0.0
+        };
+
+        if let Some(e) = conrod_piston::event::convert(e.clone(), win_w, win_h - (voffset * 2.0)) {
             ui.handle_event(e);
         }
 
@@ -158,7 +169,7 @@ fn main() {
             e.update(|_| {
                 let ui = &mut ui.set_widgets();
 
-                preview_ui.gui(ui, &ids, &mut previewer, &script_info.to_string(), win_w);
+                preview_ui.gui(ui, &ids, &mut previewer, &script_info.to_string(), win_w, img_size.width);
             });
 
             window.draw_2d(&e, |context, graphics, device| {
