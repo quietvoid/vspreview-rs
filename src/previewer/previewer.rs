@@ -270,6 +270,10 @@ impl Previewer {
     fn set_vertical_offset(&mut self, img_h: f64, draw_h: f64) {
         let mut max_off = (-1.0 * self.zoom_factor * img_h) + draw_h;
 
+        if self.preview.is_wayland() {
+            max_off -= self.preview.wl_vertical_offset(draw_h);
+        }
+
         if max_off.is_sign_positive() {
             max_off = 0.0;
         }

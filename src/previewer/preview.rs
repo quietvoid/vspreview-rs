@@ -77,16 +77,7 @@ impl Preview {
         let (draw_w, draw_h) = (draw_size.width, draw_size.height);
 
         if self.is_wayland {
-            let texture = self.texture.as_ref().unwrap();
-            let image_h = texture.get_height() as f64;
-
-            let voffset = if image_h > draw_h {
-                image_h - draw_h
-            } else {
-                draw_h - image_h
-            };
-
-            vertical_offset += voffset;
+            vertical_offset += self.wl_vertical_offset(draw_h);
         }
 
         window.draw_2d(event, |context, graphics, device| {
@@ -136,5 +127,20 @@ impl Preview {
 
     pub fn cloned_frame(&self) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
         self.cur_frame.to_owned()
+    }
+
+    pub fn is_wayland(&self) -> bool {
+        self.is_wayland
+    }
+
+    pub fn wl_vertical_offset(&self, draw_h: f64) -> f64 {
+        let texture = self.texture.as_ref().unwrap();
+        let image_h = texture.get_height() as f64;
+
+        if image_h > draw_h {
+            image_h - draw_h
+        } else {
+            draw_h - image_h
+        }
     }
 }
