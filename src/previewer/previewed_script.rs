@@ -1,14 +1,12 @@
 use std::fmt;
 use std::path::PathBuf;
 
-use itertools::izip;
 use vapoursynth::prelude::*;
-use vapoursynth::video_info::Resolution;
 use vapoursynth::video_info::VideoInfo;
 
 use piston_window::Size;
 
-const RGB24_FORMAT: i32 = PresetFormat::RGB24 as i32;
+const BGR32_FORMAT: i64 = PresetFormat::CompatBGR32 as i64;
 
 pub struct PreviewedScript {
     env: Environment,
@@ -95,7 +93,7 @@ impl PreviewedScript {
 
                 let mut args = OwnedMap::new(API::get().unwrap());
                 args.set_node("clip", &node).unwrap();
-                args.set_int("format", RGB24_FORMAT as i64).unwrap();
+                args.set_int("format", BGR32_FORMAT).unwrap();
 
                 if let Property::Constant(f) = node.info().format {
                     match f.color_family() {
@@ -108,41 +106,33 @@ impl PreviewedScript {
                 node = rgb.get_node("clip").unwrap();
 
                 let frame = node.get_frame(frame_no as usize).unwrap();
+                let data: &[u32] = frame.plane(0).unwrap();
 
-                let (r, g, b): (&[u8], &[u8], &[u8]) = (
-                    frame.plane(0).unwrap(),
-                    frame.plane(1).unwrap(),
-                    frame.plane(2).unwrap(),
-                );
+                let res = frame.resolution(0);
+                let (width, height) = (res.width, res.height);
 
-                Some(self.to_rgba_buf(frame.resolution(0), r, g, b))
+                let buf_size = (width * height) as usize;
+                let mut buf: Vec<u8> = Vec::with_capacity(buf_size * 4);
+
+                // BGRX to RGBA, with max alpha
+                for pixel in data {
+                    let mut bgrx = pixel.to_ne_bytes();
+                    bgrx[0..3].reverse();
+                    bgrx[3] = u8::MAX;
+
+                    buf.extend_from_slice(&bgrx);
+                }
+
+                let mut image = image::ImageBuffer::from_raw(width as u32, height as u32, buf).unwrap();
+                image::imageops::flip_vertical_in_place(&mut image);
+
+                Some(image)
             }
             Err(e) => {
                 println!("{:?}", e);
                 None
             }
         }
-    }
-
-    fn to_rgba_buf(
-        &self,
-        res: Resolution,
-        r: &[u8],
-        g: &[u8],
-        b: &[u8],
-    ) -> image::ImageBuffer<image::Rgba<u8>, Vec<u8>> {
-        let (width, height) = (res.width, res.height);
-
-        let buf_size = (width * height) as usize;
-
-        let mut rgba: Vec<u8> = Vec::with_capacity(buf_size * 4);
-        let alpha: u8 = 255;
-
-        for (r, g, b) in izip!(r, g, b) {
-            rgba.extend_from_slice(&[*r, *g, *b, alpha]);
-        }
-
-        image::ImageBuffer::from_raw(width as u32, height as u32, rgba).unwrap()
     }
 
     pub fn get_num_frames(&self) -> u32 {
