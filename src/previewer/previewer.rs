@@ -255,7 +255,7 @@ impl Previewer {
 
     fn save_screenshot(&self) {
         let frame_write = self.cur_frame_no;
-        let img = image::DynamicImage::ImageRgba8(self.preview.cloned_frame()).to_rgb();
+        let img = image::DynamicImage::ImageRgba8(self.preview.cloned_frame()).to_rgb8();
         let mut save_path = self.script.get_script_dir();
 
         let screen_file = format!("vspreview-{}.png", frame_write);
