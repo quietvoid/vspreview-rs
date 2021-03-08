@@ -13,7 +13,7 @@ pub struct Preview {
 }
 
 impl Preview {
-    pub fn new(script: &PreviewedScript, initial_frame: u32, is_wayland: bool,) -> Self {
+    pub fn new(script: &PreviewedScript, initial_frame: u32, is_wayland: bool) -> Self {
         let cur_frame = match script.get_frame(initial_frame) {
             Some(frame) => frame,
             None => ImageBuffer::new(0, 0),
@@ -92,7 +92,12 @@ impl Preview {
             let mut draw_state = DrawState::default();
             draw_state = draw_state.scissor([0, 0, draw_w as u32, draw_h as u32]);
 
-            Image::new().draw(self.texture.as_ref().unwrap(), &draw_state, img_transform, graphics);
+            Image::new().draw(
+                self.texture.as_ref().unwrap(),
+                &draw_state,
+                img_transform,
+                graphics,
+            );
 
             // Flush to GPU
             self.texture_context.as_mut().unwrap().encoder.flush(device);

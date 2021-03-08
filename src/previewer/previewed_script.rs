@@ -123,7 +123,8 @@ impl PreviewedScript {
                     buf.extend_from_slice(&bgrx);
                 }
 
-                let mut image = image::ImageBuffer::from_raw(width as u32, height as u32, buf).unwrap();
+                let mut image =
+                    image::ImageBuffer::from_raw(width as u32, height as u32, buf).unwrap();
                 image::imageops::flip_vertical_in_place(&mut image);
 
                 Some(image)

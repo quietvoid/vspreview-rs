@@ -9,6 +9,7 @@ extern crate conrod_piston;
 extern crate conrod_derive;
 
 use std::path::PathBuf;
+use std::time::Instant;
 
 use piston_window::texture::UpdateTexture;
 use piston_window::*;
@@ -113,12 +114,21 @@ fn main() {
         preview_ui::PreviewUi::new(previewer.get_current_no().to_string(), 150.0 / dpi);
 
     let mut script_info;
+    let mut last_key_pressed: Option<Key> = None;
+    let mut last_rendered_instant = Instant::now();
 
     while let Some(e) = window.next() {
         // TODO: Make the image canvas a conrod widget to avoid handling events twice
         match e {
             Event::Input(Input::Button(input), _opt) => match (input.button, input.state) {
                 (Button::Keyboard(k), ButtonState::Press) => {
+                    if let Some(last_key) = last_key_pressed {
+                        if last_key == k && last_rendered_instant.elapsed().as_millis() < 100 {
+                            continue;
+                        }
+                    }
+
+                    last_key_pressed = Some(k);
                     previewer.handle_key_press(&mut window, &k, &mut preview_ui);
                 }
                 (Button::Keyboard(k), ButtonState::Release) => {
@@ -136,7 +146,9 @@ fn main() {
             }
             Event::Loop(render) => {
                 if let Loop::Render(_ra) = render {
-                    previewer.rerender(&mut window, &e);
+                    if previewer.rerender(&mut window, &e) {
+                        last_rendered_instant = Instant::now();
+                    }
                 };
             }
             _ => {}
@@ -145,7 +157,7 @@ fn main() {
         let w_size = window.draw_size();
         let (win_w, win_h) = (
             w_size.width as conrod_core::Scalar,
-            w_size.height as conrod_core::Scalar
+            w_size.height as conrod_core::Scalar,
         );
 
         script_info = previewer.get_script_info();
@@ -169,7 +181,14 @@ fn main() {
             e.update(|_| {
                 let ui = &mut ui.set_widgets();
 
-                preview_ui.gui(ui, &ids, &mut previewer, &script_info.to_string(), win_w, img_size.width);
+                preview_ui.gui(
+                    ui,
+                    &ids,
+                    &mut previewer,
+                    &script_info.to_string(),
+                    win_w,
+                    img_size.width,
+                );
             });
 
             window.draw_2d(&e, |context, graphics, device| {
