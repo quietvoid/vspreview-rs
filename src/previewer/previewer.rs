@@ -7,7 +7,7 @@ use super::previewed_script::{PreviewedScript, ScriptInfo};
 
 use super::image::ImageBuffer;
 use piston_window::*;
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::Mutex};
 
 use serde_derive::{Deserialize, Serialize};
 
@@ -24,6 +24,7 @@ pub struct Previewer {
     keys_pressed: HashSet<Key>,
     rerender: bool,
     focused: bool,
+    seeking: Mutex<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -57,6 +58,7 @@ impl Previewer {
             keys_pressed: HashSet::new(),
             rerender: true,
             focused: true,
+            seeking: Mutex::new(false)
         }
     }
 
@@ -86,6 +88,10 @@ impl Previewer {
             };
 
             self.rerender = false;
+
+            if let Ok(mut seeking) = self.seeking.try_lock() {
+                *seeking = false;
+            }
         }
 
         self.preview.draw_image(
@@ -108,8 +114,9 @@ impl Previewer {
 
         match key {
             Key::Right | Key::Left | Key::Down | Key::Up | Key::H | Key::J | Key::K | Key::L => {
-                self.seek(key);
-                preview_ui.update_frame(self.cur_frame_no.to_string());
+                if self.seek(key) {
+                    preview_ui.update_frame(self.cur_frame_no.to_string());
+                }
             }
             Key::F5 | Key::R => {
                 self.reload_script();
@@ -189,48 +196,58 @@ impl Previewer {
         self.rerender = true;
     }
 
-    fn seek(&mut self, key: &Key) {
-        if !self.rerender {
-            let script = &self.script;
-            let frame_write = self.cur_frame_no;
-            let mut current = frame_write;
-
-            let num_frames = script.get_num_frames();
-            let frame_rate_num = script.get_frame_rate();
-
-            match key {
-                Key::Right | Key::L => {
-                    if current < num_frames {
-                        current += 1
-                    } else {
-                        current = num_frames
+    fn seek(&mut self, key: &Key) -> bool {
+        if let Ok(mut seeking) = self.seeking.try_lock() {
+            if !self.rerender && !*seeking {
+                let script = &self.script;
+                let frame_write = self.cur_frame_no;
+                let mut current = frame_write;
+    
+                let num_frames = script.get_num_frames();
+                let frame_rate_num = script.get_frame_rate();
+    
+                match key {
+                    Key::Right | Key::L => {
+                        if current < num_frames {
+                            current += 1
+                        } else {
+                            current = num_frames
+                        }
                     }
-                }
-                Key::Left | Key::H => {
-                    if current > 0 {
-                        current -= 1
-                    } else {
-                        current = 0
+                    Key::Left | Key::H => {
+                        if current > 0 {
+                            current -= 1
+                        } else {
+                            current = 0
+                        }
                     }
-                }
-                Key::Up | Key::K => {
-                    if current > frame_rate_num {
-                        current -= frame_rate_num
-                    } else {
-                        current = 0
+                    Key::Up | Key::K => {
+                        if current > frame_rate_num {
+                            current -= frame_rate_num
+                        } else {
+                            current = 0
+                        }
                     }
+                    Key::Down | Key::J => current += frame_rate_num,
+                    _ => (),
                 }
-                Key::Down | Key::J => current += frame_rate_num,
-                _ => (),
-            }
+    
+                println!("seek to {}", current);
+    
+                if current > num_frames {
+                    self.cur_frame_no = num_frames;
+                } else if current != frame_write {
+                    self.cur_frame_no = current;
+                    self.rerender = true;
+                }
 
-            if current > num_frames {
-                self.cur_frame_no = num_frames;
-            } else if current != frame_write {
-                self.cur_frame_no = current;
-                self.rerender = true;
+                *seeking = true;
+
+                return true;
             }
         }
+
+        return false;
     }
 
     fn translate_horizontally(&mut self, window: &PistonWindow, change: f64) {
