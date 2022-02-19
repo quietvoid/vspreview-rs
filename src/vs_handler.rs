@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
 
@@ -55,21 +56,24 @@ impl PreviewedScript {
 
     pub fn reload(&mut self) {
         let env = self.env.get_or_insert(Environment::new().unwrap());
-        println!("reloading script");
 
         if let Err(e) = env.eval_file(&self.script_file, EvalFlags::SetWorkingDir) {
             println!("{:?}", e);
         };
     }
 
-    pub fn get_outputs(&mut self) -> Vec<VSOutput> {
+    pub fn get_outputs(&mut self) -> HashMap<i32, VSOutput> {
         let env = self.env.get_or_insert(Environment::new().unwrap());
 
         (0..9)
             .map(|i| {
-                env.get_output(i).map(|(node, _alpha)| VSOutput {
-                    index: i,
-                    node_info: NodeInfo::from_videoinfo(node.info()),
+                env.get_output(i).map(|(node, _alpha)| {
+                    let out = VSOutput {
+                        index: i,
+                        node_info: NodeInfo::from_videoinfo(node.info()),
+                    };
+
+                    (i, out)
                 })
             })
             .filter_map(Result::ok)

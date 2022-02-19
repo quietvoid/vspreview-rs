@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -24,13 +25,13 @@ type FramePromise = Promise<APreviewFrame>;
 #[derive(Default)]
 pub struct Previewer {
     pub script: Arc<Mutex<PreviewedScript>>,
-    pub reload_data: Option<Promise<(Vec<VSOutput>, APreviewFrame)>>,
+    pub reload_data: Option<Promise<(HashMap<i32, VSOutput>, APreviewFrame)>>,
     pub state: PreviewState,
 
     pub initialized: bool,
 
-    pub outputs: Vec<PreviewOutput>,
-    pub last_output_index: usize,
+    pub outputs: HashMap<i32, PreviewOutput>,
+    pub last_output_key: i32,
 
     pub rerender: bool,
     pub reprocess: bool,
@@ -92,7 +93,7 @@ impl epi::App for Previewer {
 
         self.state.cur_frame_no = 12345;
         self.state.zoom_factor = 1.0;
-        self.state.scale_to_window = false;
+        self.state.scale_to_window = true;
 
         self.reload(ctx.clone(), frame.clone(), true);
     }
@@ -110,21 +111,21 @@ impl epi::App for Previewer {
         // Poll new requested frame, replace old if ready
         if let Some(promise) = self.replace_frame_promise.as_ref() {
             if promise.poll().is_ready() {
-                let output = self.outputs.get_mut(cur_output as usize).unwrap();
+                let output = self.outputs.get_mut(&cur_output).unwrap();
                 output.frame_promise = Some(self.replace_frame_promise.take().unwrap());
 
                 // Update last output once the new frame is rendered
-                self.last_output_index = cur_output as usize;
+                self.last_output_key = cur_output;
             }
         }
 
-        let num_outputs = self.outputs.len();
+        let has_current_output = !self.outputs.is_empty() && self.outputs.contains_key(&cur_output);
 
         // If the outputs differ in frame index, we should wait for the render
         // instead of rendering the old frame
-        let output_diff_frame = if num_outputs > 0 {
-            let cur_output = self.outputs.get(cur_output as usize).unwrap();
-            let last_output = self.outputs.get(self.last_output_index).unwrap();
+        let output_diff_frame = if has_current_output {
+            let cur_output = self.outputs.get(&cur_output).unwrap();
+            let last_output = self.outputs.get(&self.last_output_key).unwrap();
 
             last_output.last_frame_no != cur_output.last_frame_no
         } else {
@@ -144,20 +145,24 @@ impl epi::App for Previewer {
         egui::CentralPanel::default()
             .frame(new_frame)
             .show(ctx, |ui| {
+                if ui.input().key_pressed(Key::Q) || ui.input().key_pressed(Key::Escape) {
+                    frame.quit();
+                }
+
                 *ui.visuals_mut() = Visuals::dark();
 
                 // React on canvas resolution change
                 if self.available_size != ui.available_size() {
                     self.available_size = ui.available_size();
                     self.outputs
-                        .iter_mut()
+                        .values_mut()
                         .for_each(|o| o.force_reprocess = true);
                 }
 
                 ui.centered_and_justified(|ui| {
                     // Acquire frame texture to render now
-                    let frame_promise = if num_outputs > 0 {
-                        let output = self.outputs.get_mut(cur_output as usize).unwrap();
+                    let frame_promise = if has_current_output {
+                        let output = self.outputs.get_mut(&cur_output).unwrap();
 
                         if output_diff_frame {
                             None
@@ -172,7 +177,25 @@ impl epi::App for Previewer {
                         ui.add(egui::Spinner::new().size(200.0));
                     } else if let Some(promise) = frame_promise {
                         if let Some(pf) = promise.ready() {
-                            ui.image(&pf.texture, pf.texture.size_vec2());
+                            let win_size = self.available_size;
+                            let orig_size = pf.texture.size_vec2();
+                            let mut size = orig_size;
+
+                            if self.state.scale_to_window {
+                                // Fit to width
+                                if orig_size.x != win_size.x {
+                                    size.x = win_size.x;
+                                    size.y = (size.x * orig_size.y) / orig_size.x;
+                                }
+
+                                // Fit to height
+                                if size.y > win_size.y {
+                                    size.y = win_size.y;
+                                    size.x = (size.y * orig_size.x) / orig_size.y;
+                                }
+                            }
+
+                            ui.image(&pf.texture, size);
 
                             if !self.rerender && self.replace_frame_promise.is_none() {
                                 self.handle_keypresses(ui);
@@ -180,10 +203,6 @@ impl epi::App for Previewer {
 
                                 if ui.input().key_pressed(Key::R) {
                                     self.reload(ctx.clone(), frame.clone(), true)
-                                } else if ui.input().key_pressed(Key::Q)
-                                    || ui.input().key_pressed(Key::Escape)
-                                {
-                                    frame.quit();
                                 }
                             }
                         }
@@ -205,8 +224,6 @@ impl Previewer {
 
         let script = self.script.clone();
 
-        let size = self.available_size;
-
         self.reload_data = Some(poll_promise::Promise::spawn_thread(
             "initialization/reload",
             move || {
@@ -218,10 +235,21 @@ impl Previewer {
                 }
 
                 let outputs = mutex.get_outputs();
+                assert!(!outputs.is_empty());
 
-                let vsframe = mutex.get_frame(cur_output, cur_frame_no).unwrap();
+                let output = if !outputs.contains_key(&cur_output) {
+                    // Fallback to first output in order
+                    let mut keys: Vec<&i32> = outputs.keys().collect();
+                    keys.sort();
+
+                    **keys.first().unwrap()
+                } else {
+                    cur_output
+                };
+
+                let vsframe = mutex.get_frame(output, cur_frame_no).unwrap();
                 let image = Arc::new(vsframe.frame_image);
-                let processed_image = process_image(image.clone(), state, size);
+                let processed_image = process_image(image.clone(), state);
 
                 let pf = PreviewFrame {
                     image,
@@ -239,23 +267,33 @@ impl Previewer {
     fn check_reload_finish(&mut self) {
         if let Some(promise) = &self.reload_data {
             if let Some(data) = promise.ready() {
-                let cur_output = self.state.cur_output;
-
                 self.outputs = data
                     .0
                     .iter()
-                    .map(|o| PreviewOutput {
-                        vsoutput: o.clone(),
-                        ..Default::default()
+                    .map(|(key, o)| {
+                        let new = PreviewOutput {
+                            vsoutput: o.clone(),
+                            ..Default::default()
+                        };
+
+                        (*key, new)
                     })
                     .collect();
 
                 println!("Got outputs: {:?}", &self.outputs.len());
                 self.outputs
-                    .iter()
+                    .values()
                     .for_each(|o| println!("{:?}", o.vsoutput));
 
-                let output = self.outputs.get_mut(cur_output as usize).unwrap();
+                if !data.0.contains_key(&self.state.cur_output) {
+                    // Fallback to first output in order
+                    let mut keys: Vec<&i32> = data.0.keys().collect();
+                    keys.sort();
+
+                    self.state.cur_output = **keys.first().unwrap();
+                }
+
+                let output = self.outputs.get_mut(&self.state.cur_output).unwrap();
                 let node_info = &output.vsoutput.node_info;
 
                 let (sender, promise) = Promise::new();
@@ -264,7 +302,7 @@ impl Previewer {
                 output.frame_promise = Some(promise);
 
                 self.reload_data = None;
-                self.last_output_index = cur_output as usize;
+                self.last_output_key = self.state.cur_output;
 
                 if self.state.cur_frame_no >= node_info.num_frames {
                     self.state.cur_frame_no = node_info.num_frames - 1;
@@ -285,10 +323,7 @@ impl Previewer {
 
     fn check_rerender(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
         if !self.outputs.is_empty() {
-            let output = self
-                .outputs
-                .get_mut(self.state.cur_output as usize)
-                .unwrap();
+            let output = self.outputs.get_mut(&self.state.cur_output).unwrap();
 
             if output.force_reprocess {
                 self.rerender = true;
@@ -303,12 +338,6 @@ impl Previewer {
             let reprocess = self.reprocess;
             self.reprocess = false;
 
-            let state = self.state.clone();
-            let size = self.available_size;
-
-            let ctx = ctx.clone();
-            let frame = frame.clone();
-
             let script = self.script.clone();
 
             let pf = if reprocess {
@@ -317,16 +346,21 @@ impl Previewer {
                 None
             };
 
+            let state = self.state.clone();
+
+            let ctx = ctx.clone();
+            let frame = frame.clone();
+
             self.replace_frame_promise = Some(poll_promise::Promise::spawn_thread(
                 "fetch_frame",
-                move || Self::get_preview_image(ctx, frame, script, state, pf, reprocess, size),
+                move || Self::get_preview_image(ctx, frame, script, state, pf, reprocess),
             ));
         }
     }
 
     fn get_current_frame(&self) -> Option<APreviewFrame> {
         if !self.outputs.is_empty() {
-            let output = self.outputs.get(self.state.cur_output as usize).unwrap();
+            let output = self.outputs.get(&self.state.cur_output).unwrap();
 
             // Already have a frame
             if let Some(p) = &output.frame_promise {
@@ -346,7 +380,6 @@ impl Previewer {
         state: PreviewState,
         pf: Option<APreviewFrame>,
         reprocess: bool,
-        size: eframe::epaint::Vec2,
     ) -> APreviewFrame {
         // This is fine because only one promise may be executing at a time
         let mut mutex = script.lock().unwrap();
@@ -356,7 +389,7 @@ impl Previewer {
         // Reuse existing image, process and recreate texture
         let pf = if reprocess && have_existing_frame {
             let pf = pf.unwrap();
-            let processed_image = process_image(pf.image.clone(), state, size);
+            let processed_image = process_image(pf.image.clone(), state);
 
             PreviewFrame {
                 image: pf.image.clone(),
@@ -369,7 +402,7 @@ impl Previewer {
                 .get_frame(state.cur_output, state.cur_frame_no)
                 .unwrap();
             let image = Arc::new(vsframe.frame_image);
-            let processed_image = process_image(image.clone(), state, size);
+            let processed_image = process_image(image.clone(), state);
 
             PreviewFrame {
                 image,
@@ -398,10 +431,7 @@ impl Previewer {
             return false;
         }
 
-        let output = self
-            .outputs
-            .get_mut(self.state.cur_output as usize)
-            .unwrap();
+        let output = self.outputs.get_mut(&self.state.cur_output).unwrap();
         let node_info = &output.vsoutput.node_info;
 
         let current = self.state.cur_frame_no;
@@ -452,38 +482,35 @@ impl Previewer {
             return false;
         }
 
-        let cur_output = self.state.cur_output;
-        let num_outputs = self.outputs.len();
+        let old_output = self.state.cur_output;
 
-        let mut res = if ui.input().key_pressed(Key::Num1) && cur_output != 0 && num_outputs >= 1 {
-            self.state.cur_output = 0;
-            true
-        } else if ui.input().key_pressed(Key::Num2) && cur_output != 1 && num_outputs >= 2 {
-            self.state.cur_output = 1;
-            true
-        } else if ui.input().key_pressed(Key::Num3) && cur_output != 2 && num_outputs >= 3 {
-            self.state.cur_output = 2;
-            true
-        } else if ui.input().key_pressed(Key::Num4) && cur_output != 3 && num_outputs >= 4 {
-            self.state.cur_output = 3;
-            true
-        } else if ui.input().key_pressed(Key::Num5) && cur_output != 4 && num_outputs >= 5 {
-            self.state.cur_output = 4;
-            true
-        } else if ui.input().key_pressed(Key::Num6) && cur_output != 5 && num_outputs >= 6 {
-            self.state.cur_output = 5;
-            true
-        } else if ui.input().key_pressed(Key::Num7) && cur_output != 6 && num_outputs >= 7 {
-            self.state.cur_output = 6;
-            true
-        } else if ui.input().key_pressed(Key::Num8) && cur_output != 7 && num_outputs >= 8 {
-            self.state.cur_output = 7;
-            true
-        } else if ui.input().key_pressed(Key::Num9) && cur_output != 8 && num_outputs >= 9 {
-            self.state.cur_output = 8;
-            true
-        } else if ui.input().key_pressed(Key::Num0) && cur_output != 9 && num_outputs >= 10 {
-            self.state.cur_output = 9;
+        let new_output: i32 = if ui.input().key_pressed(Key::Num1) {
+            0
+        } else if ui.input().key_pressed(Key::Num2) {
+            1
+        } else if ui.input().key_pressed(Key::Num3) {
+            2
+        } else if ui.input().key_pressed(Key::Num4) {
+            3
+        } else if ui.input().key_pressed(Key::Num5) {
+            4
+        } else if ui.input().key_pressed(Key::Num6) {
+            5
+        } else if ui.input().key_pressed(Key::Num7) {
+            6
+        } else if ui.input().key_pressed(Key::Num8) {
+            7
+        } else if ui.input().key_pressed(Key::Num9) {
+            8
+        } else if ui.input().key_pressed(Key::Num0) {
+            9
+        } else {
+            -1
+        };
+
+        let mut res = if new_output >= 0 && self.outputs.contains_key(&new_output) {
+            self.state.cur_output = new_output;
+
             true
         } else {
             false
@@ -491,22 +518,17 @@ impl Previewer {
 
         // Changed output
         if res {
-            let out = self.outputs.get(cur_output as usize).unwrap();
-            let new = self.outputs.get(self.state.cur_output as usize).unwrap();
+            let old = self.outputs.get(&old_output).unwrap();
+            let new = self.outputs.get(&self.state.cur_output).unwrap();
 
-            // Rerender every time just because it's simpler than syncing across outputs
-            let rerender = self.state.zoom_factor != 1.0
-                || self.state.translate_x != 0
-                || self.state.translate_y != 0;
-
-            res = out.last_frame_no != new.last_frame_no || rerender;
+            res = old.last_frame_no != new.last_frame_no;
         }
 
         res
     }
 
     fn handle_mouse_inputs(&mut self, ui: &mut Ui) {
-        if ui.input().modifiers.ctrl {
+        let res = if ui.input().modifiers.ctrl {
             // Zoom
             let mut delta = ui.input().zoom_delta();
             let mut new_factor = self.state.zoom_factor;
@@ -544,19 +566,31 @@ impl Previewer {
             }
 
             if delta != 1.0 && new_factor != self.state.zoom_factor {
-                self.state.zoom_factor = f32::trunc(new_factor * 1000.0) / 1000.0;
+                let trunc_factor = if new_factor < 1.0 { 1000.0 } else { 10.0 };
 
-                self.rerender = true;
-                self.reprocess = true;
+                self.state.zoom_factor = (new_factor * trunc_factor).round() / trunc_factor;
 
-                println!("Zoom factor {}", self.state.zoom_factor);
+                true
+            } else {
+                false
             }
         } else if ui.input().modifiers.shift {
             // Horizontal scroll
             let dx = ui.input().scroll_delta.x;
+            false
         } else {
             // Vertical scroll
             let dy = ui.input().scroll_delta.y;
+            false
+        };
+
+        // Set other outputs to reprocess if we're modifying the image
+        if res {
+            self.outputs
+                .values_mut()
+                .for_each(|out| out.force_reprocess = true);
         }
+
+        self.rerender |= res;
     }
 }

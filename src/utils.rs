@@ -51,11 +51,7 @@ pub fn frame_to_colorimage(frame: FrameRef) -> ColorImage {
     }
 }
 
-pub fn process_image(
-    orig: Arc<ColorImage>,
-    state: PreviewState,
-    final_size: eframe::epaint::Vec2,
-) -> ColorImage {
+pub fn process_image(orig: Arc<ColorImage>, state: PreviewState) -> ColorImage {
     let size = orig.size;
     let mut img = DynamicImage::ImageRgba8(image::ImageBuffer::from_fn(
         size[0] as u32,
@@ -65,7 +61,6 @@ pub fn process_image(
 
     let zoom_factor = state.zoom_factor;
     let (tx, ty) = (state.translate_x, state.translate_y);
-    let scale_to_win = state.scale_to_window;
 
     if zoom_factor != 1.0 && zoom_factor >= MIN_ZOOM {
         let mut w = size[0] as f32;
@@ -81,14 +76,6 @@ pub fn process_image(
         let (w, h) = (w * zoom_factor, h * zoom_factor);
 
         img = img.resize(w.ceil() as u32, h.ceil() as u32, image::imageops::Nearest);
-    }
-
-    if scale_to_win && final_size.min_elem() > 0.0 {
-        img = img.resize(
-            final_size.x as u32,
-            final_size.y as u32,
-            image::imageops::Nearest,
-        );
     }
 
     let new_size = [img.width() as usize, img.height() as usize];

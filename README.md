@@ -22,7 +22,7 @@ Seek 1 second: Down, Up
 Alternative seeking: H, J, K, L  
 
 Change outputs: Num1 to Num0  
-Outputs must be from 0-9, and no gaps in between indices
+Outputs must be from 0-9
 
 Zoom: Ctrl + Scroll  
 Ctrl and Up/Down for 0.1 zoom increment  
