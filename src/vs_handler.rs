@@ -33,7 +33,7 @@ pub struct VSOutput {
     pub node_info: NodeInfo,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct VSFrame {
     pub frame_image: ColorImage,
     pub frame_type: String,

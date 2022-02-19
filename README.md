@@ -25,7 +25,7 @@ Change outputs: Num1 to Num0
 Outputs must be from 0-9, and no gaps in between indices
 
 Zoom: Ctrl + Scroll  
-Ctrl and +/- for 0.1 zoom increment
+Ctrl and Up/Down for 0.1 zoom increment  
 
 Scroll horizontally: Home/End, Shift + Scroll  
 Scroll vertically: PageUp/PageDown, Scroll  

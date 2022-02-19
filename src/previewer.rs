@@ -12,19 +12,19 @@ use eframe::{
     egui::{self, Frame},
     epi,
 };
-use image::DynamicImage;
 use poll_promise::Promise;
 
+use crate::utils::{process_image, MAX_ZOOM, MIN_ZOOM};
 use crate::vs_handler::PreviewedScript;
 use crate::vs_handler::VSOutput;
 
-const MIN_ZOOM: f32 = 0.25;
-const MAX_ZOOM: f32 = 30.0;
+type APreviewFrame = Arc<PreviewFrame>;
+type FramePromise = Promise<APreviewFrame>;
 
 #[derive(Default)]
 pub struct Previewer {
     pub script: Arc<Mutex<PreviewedScript>>,
-    pub reload_data: Option<Promise<(Vec<VSOutput>, PreviewFrame)>>,
+    pub reload_data: Option<Promise<(Vec<VSOutput>, APreviewFrame)>>,
     pub state: PreviewState,
 
     pub initialized: bool,
@@ -33,7 +33,8 @@ pub struct Previewer {
     pub last_output_index: usize,
 
     pub rerender: bool,
-    pub replace_frame_promise: Option<Promise<PreviewFrame>>,
+    pub reprocess: bool,
+    pub replace_frame_promise: Option<FramePromise>,
 
     pub available_size: eframe::epaint::Vec2,
 }
@@ -41,28 +42,31 @@ pub struct Previewer {
 #[derive(Default, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct PreviewState {
-    cur_output: i32,
-    cur_frame_no: u32,
+    pub cur_output: i32,
+    pub cur_frame_no: u32,
 
-    scale_to_window: bool,
+    pub scale_to_window: bool,
 
-    zoom_factor: f32,
-    translate_x: u32,
-    translate_y: u32,
+    pub zoom_factor: f32,
+    pub translate_x: u32,
+    pub translate_y: u32,
 }
 
 #[derive(Default)]
 pub struct PreviewOutput {
     pub vsoutput: VSOutput,
 
-    pub frame_promise: Option<Promise<PreviewFrame>>,
+    pub frame_promise: Option<FramePromise>,
 
-    pub force_rerender: bool,
+    pub force_reprocess: bool,
     pub last_frame_no: u32,
 }
 
 #[derive(Clone)]
 pub struct PreviewFrame {
+    // Thread safe as always immutable
+    pub image: Arc<ColorImage>,
+
     pub texture: egui::TextureHandle,
     pub frame_type: String,
 }
@@ -147,7 +151,7 @@ impl epi::App for Previewer {
                     self.available_size = ui.available_size();
                     self.outputs
                         .iter_mut()
-                        .for_each(|o| o.force_rerender = true);
+                        .for_each(|o| o.force_reprocess = true);
                 }
 
                 ui.centered_and_justified(|ui| {
@@ -172,9 +176,14 @@ impl epi::App for Previewer {
 
                             if !self.rerender && self.replace_frame_promise.is_none() {
                                 self.handle_keypresses(ui);
+                                self.handle_mouse_inputs(ui);
 
                                 if ui.input().key_pressed(Key::R) {
                                     self.reload(ctx.clone(), frame.clone(), true)
+                                } else if ui.input().key_pressed(Key::Q)
+                                    || ui.input().key_pressed(Key::Escape)
+                                {
+                                    frame.quit();
                                 }
                             }
                         }
@@ -211,17 +220,18 @@ impl Previewer {
                 let outputs = mutex.get_outputs();
 
                 let vsframe = mutex.get_frame(cur_output, cur_frame_no).unwrap();
-                let original_image = vsframe.frame_image;
-                let processed_image = Self::process_image(original_image, state, size);
+                let image = Arc::new(vsframe.frame_image);
+                let processed_image = process_image(image.clone(), state, size);
 
                 let pf = PreviewFrame {
+                    image,
                     texture: ctx.load_texture("initial_frame", processed_image),
                     frame_type: vsframe.frame_type,
                 };
 
                 frame.request_repaint();
 
-                (outputs, pf)
+                (outputs, Arc::new(pf))
             },
         ));
     }
@@ -262,6 +272,8 @@ impl Previewer {
 
                 // First reload
                 if !self.initialized {
+                    self.initialized = true;
+
                     // Force rerender once we have the initial window size
                     if self.state.scale_to_window {
                         self.rerender = true;
@@ -278,19 +290,20 @@ impl Previewer {
                 .get_mut(self.state.cur_output as usize)
                 .unwrap();
 
-            if output.force_rerender {
+            if output.force_reprocess {
                 self.rerender = true;
-                output.force_rerender = false;
+                self.reprocess = true;
+                output.force_reprocess = false;
             }
         }
 
         if self.rerender && self.replace_frame_promise.is_none() {
             self.rerender = false;
 
-            let state = self.state.clone();
-            let cur_output = state.cur_output;
-            let cur_frame_no = state.cur_frame_no;
+            let reprocess = self.reprocess;
+            self.reprocess = false;
 
+            let state = self.state.clone();
             let size = self.available_size;
 
             let ctx = ctx.clone();
@@ -298,25 +311,77 @@ impl Previewer {
 
             let script = self.script.clone();
 
+            let pf = if reprocess {
+                self.get_current_frame()
+            } else {
+                None
+            };
+
             self.replace_frame_promise = Some(poll_promise::Promise::spawn_thread(
                 "fetch_frame",
-                move || {
-                    // This is fine because only one promise may be executing at a time
-                    let mut mutex = script.lock().unwrap();
-
-                    let vsframe = mutex.get_frame(cur_output, cur_frame_no).unwrap();
-                    let original_image = vsframe.frame_image;
-                    let processed_image = Self::process_image(original_image, state, size);
-
-                    frame.request_repaint();
-
-                    PreviewFrame {
-                        texture: ctx.load_texture("frame", processed_image),
-                        frame_type: vsframe.frame_type,
-                    }
-                },
+                move || Self::get_preview_image(ctx, frame, script, state, pf, reprocess, size),
             ));
         }
+    }
+
+    fn get_current_frame(&self) -> Option<APreviewFrame> {
+        if !self.outputs.is_empty() {
+            let output = self.outputs.get(self.state.cur_output as usize).unwrap();
+
+            // Already have a frame
+            if let Some(p) = &output.frame_promise {
+                p.ready().cloned()
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    fn get_preview_image(
+        ctx: egui::Context,
+        frame: epi::Frame,
+        script: Arc<Mutex<PreviewedScript>>,
+        state: PreviewState,
+        pf: Option<APreviewFrame>,
+        reprocess: bool,
+        size: eframe::epaint::Vec2,
+    ) -> APreviewFrame {
+        // This is fine because only one promise may be executing at a time
+        let mut mutex = script.lock().unwrap();
+
+        let have_existing_frame = pf.is_some();
+
+        // Reuse existing image, process and recreate texture
+        let pf = if reprocess && have_existing_frame {
+            let pf = pf.unwrap();
+            let processed_image = process_image(pf.image.clone(), state, size);
+
+            PreviewFrame {
+                image: pf.image.clone(),
+                texture: ctx.load_texture("frame", processed_image),
+                frame_type: pf.frame_type.clone(),
+            }
+        } else {
+            // Request new frame, process and recreate texture
+            let vsframe = mutex
+                .get_frame(state.cur_output, state.cur_frame_no)
+                .unwrap();
+            let image = Arc::new(vsframe.frame_image);
+            let processed_image = process_image(image.clone(), state, size);
+
+            PreviewFrame {
+                image,
+                texture: ctx.load_texture("frame", processed_image),
+                frame_type: vsframe.frame_type,
+            }
+        };
+
+        // Once frame is ready
+        frame.request_repaint();
+
+        Arc::new(pf)
     }
 
     fn handle_keypresses(&mut self, ui: &mut Ui) {
@@ -429,55 +494,69 @@ impl Previewer {
             let out = self.outputs.get(cur_output as usize).unwrap();
             let new = self.outputs.get(self.state.cur_output as usize).unwrap();
 
-            res = out.last_frame_no != new.last_frame_no;
+            // Rerender every time just because it's simpler than syncing across outputs
+            let rerender = self.state.zoom_factor != 1.0
+                || self.state.translate_x != 0
+                || self.state.translate_y != 0;
+
+            res = out.last_frame_no != new.last_frame_no || rerender;
         }
 
         res
     }
 
-    fn process_image(
-        orig: ColorImage,
-        state: PreviewState,
-        final_size: eframe::epaint::Vec2,
-    ) -> ColorImage {
-        let size = orig.size;
-        let mut img = DynamicImage::ImageRgba8(image::ImageBuffer::from_fn(
-            size[0] as u32,
-            size[1] as u32,
-            |x, y| image::Rgba(orig[(x as usize, y as usize)].to_array()),
-        ));
+    fn handle_mouse_inputs(&mut self, ui: &mut Ui) {
+        if ui.input().modifiers.ctrl {
+            // Zoom
+            let mut delta = ui.input().zoom_delta();
+            let mut new_factor = self.state.zoom_factor;
 
-        let zoom_factor = state.zoom_factor;
-        let (tx, ty) = (state.translate_x, state.translate_y);
-        let scale_to_win = state.scale_to_window;
-
-        if zoom_factor != 1.0 && zoom_factor >= MIN_ZOOM {
-            let mut w = size[0] as f32;
-            let mut h = size[1] as f32;
-
-            if zoom_factor > 1.0 {
-                w /= zoom_factor;
-                h /= zoom_factor;
-
-                img = img.crop_imm(tx, ty, w.ceil() as u32, h.ceil() as u32);
+            let zoom_modifier = if ui.input().key_pressed(Key::ArrowDown) {
+                delta = 0.0;
+                0.1
+            } else if ui.input().key_pressed(Key::ArrowUp) {
+                delta = 2.0;
+                0.1
+            } else {
+                1.0
             };
 
-            let (w, h) = (w * zoom_factor, h * zoom_factor);
+            // Ignore 1.0 delta, means no zoom done
+            if delta < 1.0 {
+                // Smaller unzooming when below 1.0
+                if new_factor <= 1.0 {
+                    new_factor -= 0.125;
+                } else {
+                    new_factor -= zoom_modifier;
+                }
 
-            img = img.resize(w.ceil() as u32, h.ceil() as u32, image::imageops::Nearest);
+                new_factor = new_factor.clamp(MIN_ZOOM, MAX_ZOOM);
+            } else if delta > 1.0 {
+                if new_factor < 1.0 {
+                    // Zoom back from a unzoomed state
+                    // Go back to no zoom
+                    new_factor += 0.125;
+                } else {
+                    new_factor += zoom_modifier;
+                }
+
+                new_factor = new_factor.clamp(MIN_ZOOM, MAX_ZOOM);
+            }
+
+            if delta != 1.0 && new_factor != self.state.zoom_factor {
+                self.state.zoom_factor = f32::trunc(new_factor * 1000.0) / 1000.0;
+
+                self.rerender = true;
+                self.reprocess = true;
+
+                println!("Zoom factor {}", self.state.zoom_factor);
+            }
+        } else if ui.input().modifiers.shift {
+            // Horizontal scroll
+            let dx = ui.input().scroll_delta.x;
+        } else {
+            // Vertical scroll
+            let dy = ui.input().scroll_delta.y;
         }
-
-        if scale_to_win && final_size.min_elem() > 0.0 {
-            img = img.resize(
-                final_size.x as u32,
-                final_size.y as u32,
-                image::imageops::Nearest,
-            );
-        }
-
-        let new_size = [img.width() as usize, img.height() as usize];
-        let processed = egui::ColorImage::from_rgba_unmultiplied(new_size, img.as_bytes());
-
-        processed
     }
 }
