@@ -18,8 +18,8 @@ use poll_promise::Promise;
 use crate::vs_handler::PreviewedScript;
 use crate::vs_handler::VSOutput;
 
-const MIN_ZOOM: f64 = 1.0;
-const MAX_ZOOM: f64 = 30.0;
+const MIN_ZOOM: f32 = 0.25;
+const MAX_ZOOM: f32 = 30.0;
 
 #[derive(Default)]
 pub struct Previewer {
@@ -47,8 +47,8 @@ pub struct PreviewState {
     scale_to_window: bool,
 
     zoom_factor: f32,
-    translate_x: f32,
-    translate_y: f32,
+    translate_x: u32,
+    translate_y: u32,
 }
 
 #[derive(Default)]
@@ -79,11 +79,16 @@ impl epi::App for Previewer {
         _storage: Option<&dyn epi::Storage>,
     ) {
         if let Some(storage) = _storage {
-            self.state = epi::get_value(storage, epi::APP_KEY).unwrap_or_default();
+            self.state = epi::get_value(storage, epi::APP_KEY).unwrap_or(PreviewState {
+                scale_to_window: true,
+                zoom_factor: 1.0,
+                ..Default::default()
+            })
         }
 
         self.state.cur_frame_no = 12345;
-        self.state.scale_to_window = true;
+        self.state.zoom_factor = 1.0;
+        self.state.scale_to_window = false;
 
         self.reload(ctx.clone(), frame.clone(), true);
     }
@@ -445,6 +450,22 @@ impl Previewer {
         let zoom_factor = state.zoom_factor;
         let (tx, ty) = (state.translate_x, state.translate_y);
         let scale_to_win = state.scale_to_window;
+
+        if zoom_factor != 1.0 && zoom_factor >= MIN_ZOOM {
+            let mut w = size[0] as f32;
+            let mut h = size[1] as f32;
+
+            if zoom_factor > 1.0 {
+                w /= zoom_factor;
+                h /= zoom_factor;
+
+                img = img.crop_imm(tx, ty, w.ceil() as u32, h.ceil() as u32);
+            };
+
+            let (w, h) = (w * zoom_factor, h * zoom_factor);
+
+            img = img.resize(w.ceil() as u32, h.ceil() as u32, image::imageops::Nearest);
+        }
 
         if scale_to_win && final_size.min_elem() > 0.0 {
             img = img.resize(
