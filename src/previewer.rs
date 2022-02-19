@@ -12,10 +12,14 @@ use eframe::{
     egui::{self, Frame},
     epi,
 };
+use image::DynamicImage;
 use poll_promise::Promise;
 
 use crate::vs_handler::PreviewedScript;
 use crate::vs_handler::VSOutput;
+
+const MIN_ZOOM: f64 = 1.0;
+const MAX_ZOOM: f64 = 30.0;
 
 #[derive(Default)]
 pub struct Previewer {
@@ -23,11 +27,15 @@ pub struct Previewer {
     pub reload_data: Option<Promise<(Vec<VSOutput>, PreviewFrame)>>,
     pub state: PreviewState,
 
+    pub initialized: bool,
+
     pub outputs: Vec<PreviewOutput>,
     pub last_output_index: usize,
 
     pub rerender: bool,
     pub replace_frame_promise: Option<Promise<PreviewFrame>>,
+
+    pub available_size: eframe::epaint::Vec2,
 }
 
 #[derive(Default, Clone, serde::Deserialize, serde::Serialize)]
@@ -46,7 +54,10 @@ pub struct PreviewState {
 #[derive(Default)]
 pub struct PreviewOutput {
     pub vsoutput: VSOutput,
+
     pub frame_promise: Option<Promise<PreviewFrame>>,
+
+    pub force_rerender: bool,
     pub last_frame_no: u32,
 }
 
@@ -72,7 +83,7 @@ impl epi::App for Previewer {
         }
 
         self.state.cur_frame_no = 12345;
-        self.state.scale_to_window = false;
+        self.state.scale_to_window = true;
 
         self.reload(ctx.clone(), frame.clone(), true);
     }
@@ -126,6 +137,14 @@ impl epi::App for Previewer {
             .show(ctx, |ui| {
                 *ui.visuals_mut() = Visuals::dark();
 
+                // React on canvas resolution change
+                if self.available_size != ui.available_size() {
+                    self.available_size = ui.available_size();
+                    self.outputs
+                        .iter_mut()
+                        .for_each(|o| o.force_rerender = true);
+                }
+
                 ui.centered_and_justified(|ui| {
                     // Acquire frame texture to render now
                     let frame_promise = if num_outputs > 0 {
@@ -144,15 +163,7 @@ impl epi::App for Previewer {
                         ui.add(egui::Spinner::new().size(200.0));
                     } else if let Some(promise) = frame_promise {
                         if let Some(pf) = promise.ready() {
-                            let texture = &pf.texture;
-                            let mut size = texture.size_vec2();
-
-                            if self.state.scale_to_window {
-                                size *= (ui.available_width() / size.x).min(1.0);
-                                size *= (ui.available_height() / size.y).min(1.0);
-                            }
-
-                            ui.image(texture, size);
+                            ui.image(&pf.texture, pf.texture.size_vec2());
 
                             if !self.rerender && self.replace_frame_promise.is_none() {
                                 self.handle_keypresses(ui);
@@ -180,6 +191,8 @@ impl Previewer {
 
         let script = self.script.clone();
 
+        let size = self.available_size;
+
         self.reload_data = Some(poll_promise::Promise::spawn_thread(
             "initialization/reload",
             move || {
@@ -194,7 +207,7 @@ impl Previewer {
 
                 let vsframe = mutex.get_frame(cur_output, cur_frame_no).unwrap();
                 let original_image = vsframe.frame_image;
-                let processed_image = Self::process_image(original_image, state);
+                let processed_image = Self::process_image(original_image, state, size);
 
                 let pf = PreviewFrame {
                     texture: ctx.load_texture("initial_frame", processed_image),
@@ -241,19 +254,39 @@ impl Previewer {
                 if self.state.cur_frame_no >= node_info.num_frames {
                     self.state.cur_frame_no = node_info.num_frames - 1;
                 }
+
+                // First reload
+                if !self.initialized {
+                    // Force rerender once we have the initial window size
+                    if self.state.scale_to_window {
+                        self.rerender = true;
+                    }
+                }
             }
         }
     }
 
     fn check_rerender(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
+        if !self.outputs.is_empty() {
+            let output = self
+                .outputs
+                .get_mut(self.state.cur_output as usize)
+                .unwrap();
+
+            if output.force_rerender {
+                self.rerender = true;
+                output.force_rerender = false;
+            }
+        }
+
         if self.rerender && self.replace_frame_promise.is_none() {
             self.rerender = false;
-
-            println!("Rerendering");
 
             let state = self.state.clone();
             let cur_output = state.cur_output;
             let cur_frame_no = state.cur_frame_no;
+
+            let size = self.available_size;
 
             let ctx = ctx.clone();
             let frame = frame.clone();
@@ -268,7 +301,7 @@ impl Previewer {
 
                     let vsframe = mutex.get_frame(cur_output, cur_frame_no).unwrap();
                     let original_image = vsframe.frame_image;
-                    let processed_image = Self::process_image(original_image, state);
+                    let processed_image = Self::process_image(original_image, state, size);
 
                     frame.request_repaint();
 
@@ -397,18 +430,33 @@ impl Previewer {
         res
     }
 
-    fn process_image(orig: ColorImage, state: PreviewState) -> ColorImage {
+    fn process_image(
+        orig: ColorImage,
+        state: PreviewState,
+        final_size: eframe::epaint::Vec2,
+    ) -> ColorImage {
         let size = orig.size;
-        let img = image::ImageBuffer::from_fn(size[0] as u32, size[1] as u32, |x, y| {
-            image::Rgba(orig[(x as usize, y as usize)].to_array())
-        });
+        let mut img = DynamicImage::ImageRgba8(image::ImageBuffer::from_fn(
+            size[0] as u32,
+            size[1] as u32,
+            |x, y| image::Rgba(orig[(x as usize, y as usize)].to_array()),
+        ));
 
         let zoom_factor = state.zoom_factor;
         let (tx, ty) = (state.translate_x, state.translate_y);
+        let scale_to_win = state.scale_to_window;
+
+        if scale_to_win && final_size.min_elem() > 0.0 {
+            img = img.resize(
+                final_size.x as u32,
+                final_size.y as u32,
+                image::imageops::Nearest,
+            );
+        }
 
         let new_size = [img.width() as usize, img.height() as usize];
-        let processed = egui::ColorImage::from_rgba_unmultiplied(new_size, img.into_raw().as_slice());
+        let processed = egui::ColorImage::from_rgba_unmultiplied(new_size, img.as_bytes());
 
-        return processed;
+        processed
     }
 }
