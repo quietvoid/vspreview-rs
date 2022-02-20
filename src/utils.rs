@@ -66,17 +66,31 @@ pub fn process_image(
     }));
 
     let zoom_factor = state.zoom_factor;
-    let (tx, ty) = (
-        state.translate.x.round() as u32,
-        state.translate.y.round() as u32,
-    );
+    let (tx, ty) = (state.translate.x.round(), state.translate.y.round());
 
     // Rounded up
     let win_size = win_size.round();
+    let (mut w, mut h) = (src_w as f32, src_h as f32);
 
-    if zoom_factor != 1.0 && zoom_factor >= MIN_ZOOM {
-        let mut w = src_w as f32;
-        let mut h = src_h as f32;
+    println!("Original {}x{}", img.width(), img.height());
+
+    // FIXME: Doesn't translate properly when zoomed
+    if zoom_factor >= 1.0 {
+        println!("translate x {} y {}", tx, ty);
+
+        w -= tx.abs();
+        h -= ty.abs();
+
+        // Positive = crop right part
+        let x = if tx.is_sign_negative() { 0.0 } else { tx.abs() };
+
+        let y = if ty.is_sign_negative() { 0.0 } else { ty.abs() };
+
+        img = img.crop_imm(x as u32, y as u32, w as u32, h as u32);
+    }
+
+    if zoom_factor != 1.0 {
+        println!("Zoom {}", zoom_factor);
 
         if zoom_factor > 1.0 {
             w /= zoom_factor;
@@ -86,13 +100,13 @@ pub fn process_image(
         }
 
         let (w, h) = (w * zoom_factor, h * zoom_factor);
-        let orig_size = Vec2::new(w as f32, h as f32).round();
+        let new_size = Vec2::new(w as f32, h as f32).round();
 
         let target_size = if state.scale_to_window {
             // Crop and resize up to max size of window
-            dimensions_for_window(win_size, orig_size).round()
+            dimensions_for_window(win_size, new_size).round()
         } else {
-            orig_size
+            new_size
         };
 
         img = resize_fast(

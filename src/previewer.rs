@@ -53,7 +53,10 @@ pub struct PreviewState {
     pub scale_filter: PreviewFilterType,
 
     pub zoom_factor: f32,
+
     pub translate: Vec2,
+    pub scroll_multiplier: f32,
+    pub canvas_margin: f32,
 }
 
 #[derive(Default)]
@@ -100,13 +103,21 @@ impl epi::App for Previewer {
             self.state = epi::get_value(storage, epi::APP_KEY).unwrap_or(PreviewState {
                 scale_to_window: true,
                 zoom_factor: 1.0,
+                scroll_multiplier: 2.0,
+                canvas_margin: 2.0,
                 ..Default::default()
             })
         }
 
         self.state.cur_frame_no = 12345;
         self.state.zoom_factor = 1.0;
-        self.state.scale_to_window = true;
+        self.state.scale_to_window = false;
+        self.state.translate = Vec2::ZERO;
+        self.state.canvas_margin = 10.0;
+
+        if self.state.scroll_multiplier <= 0.0 {
+            self.state.scroll_multiplier = 1.0;
+        }
 
         self.reload(ctx.clone(), frame.clone(), true);
     }
@@ -146,7 +157,7 @@ impl epi::App for Previewer {
         };
 
         let new_frame = Frame::default()
-            .fill(Color32::from_gray(24))
+            .fill(Color32::from_gray(150))
             .margin(Margin::symmetric(0.0, 0.0))
             .stroke(Stroke::none());
 
@@ -188,12 +199,19 @@ impl epi::App for Previewer {
                         ui.add(egui::Spinner::new().size(200.0));
                     } else if let Some(promise) = frame_promise {
                         if let Some(pf) = promise.ready() {
-                            let size = pf.texture.size_vec2();
-                            ui.image(&pf.texture, size);
+                            let image_size: [f32; 2] = pf.image.size.map(|i| i as f32);
+
+                            let tex_size = pf.texture.size_vec2();
+                            ui.image(&pf.texture, tex_size);
 
                             if !self.rerender && self.replace_frame_promise.is_none() {
                                 self.handle_keypresses(ui);
-                                self.handle_mouse_inputs(ui, size, zoom_delta, scroll_delta);
+                                self.handle_mouse_inputs(
+                                    ui,
+                                    Vec2::from(image_size),
+                                    zoom_delta,
+                                    scroll_delta,
+                                );
 
                                 if ui.input().key_pressed(Key::R) {
                                     self.reload(ctx.clone(), frame.clone(), true)
@@ -346,7 +364,19 @@ impl Previewer {
             let win_size = self.available_size;
 
             let pf = if reprocess {
-                self.get_current_frame()
+                let frame = self.get_current_frame();
+
+                if let Some(pf) = &frame {
+                    // Ignore translate when image fits already
+                    if win_size.x >= pf.image.size[0] as f32 {
+                        self.state.translate.x = 0.0;
+                    }
+                    if win_size.y >= pf.image.size[1] as f32 {
+                        self.state.translate.y = 0.0;
+                    }
+                }
+
+                frame
             } else {
                 None
             };
@@ -533,7 +563,7 @@ impl Previewer {
         res
     }
 
-    /// Size of the image to scroll/zoom
+    /// Size of the image to scroll/zoom, not the final texture
     fn handle_mouse_inputs(
         &mut self,
         ui: &mut Ui,
@@ -587,9 +617,35 @@ impl Previewer {
                 false
             }
         } else if scroll_delta.length() > 0.0 {
-            self.state.translate -= scroll_delta;
-            self.state.translate.x = self.state.translate.x.clamp(0.0, size.x);
-            self.state.translate.y = self.state.translate.y.clamp(0.0, size.y);
+            self.state.translate -= scroll_delta * self.state.scroll_multiplier;
+            let margin = self.state.canvas_margin.abs();
+
+            // Left and right clipped
+            let max_tx = (size.x - self.available_size.x).abs();
+
+            // Clips at the bottom only vertically
+            let max_ty = (size.y - self.available_size.y).abs();
+
+            // With 2px margin to be able to see the edge
+            self.state.translate.x = if max_tx.is_sign_positive() {
+                self.state
+                    .translate
+                    .x
+                    .clamp(-max_tx - margin, max_tx + margin)
+            } else {
+                // Negative means the image isn't clipped by the window rect
+                self.state.translate.x.clamp(0.0, 0.0)
+            };
+
+            self.state.translate.y = if max_ty.is_sign_positive() {
+                self.state
+                    .translate
+                    .y
+                    .clamp(-max_ty - margin, max_ty + margin)
+            } else {
+                // Negative means the image isn't clipped by the window rect
+                self.state.translate.y.clamp(0.0, 0.0)
+            };
 
             true
         } else {
