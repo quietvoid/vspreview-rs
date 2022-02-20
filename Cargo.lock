@@ -53,9 +53,9 @@ checksum = "000444226fcff248f2bc4c7625be32c63caccfecc2723a2b9f78a7487a49c407"
 
 [[package]]
 name = "anyhow"
-version = "1.0.53"
+version = "1.0.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94a45b455c14666b85fc40a019e8ab9eb75e3a124e05494f5397122bc9eb06e0"
+checksum = "7a99269dff3bc004caa411f38845c20303f1e393ca2bd6581576fa3a7f59577d"
 
 [[package]]
 name = "async-broadcast"
@@ -114,9 +114,9 @@ dependencies = [
 
 [[package]]
 name = "async-lock"
-version = "2.4.0"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6a8ea61bf9947a1007c5cada31e647dbc77b103c679858150003ba697ea798b"
+checksum = "e97a171d191782fba31bb902b14ad94e24a68145032b7eedf871ab0bc0d077b6"
 dependencies = [
  "event-listener",
 ]
@@ -608,7 +608,7 @@ checksum = "6907e25393cdcc1f4f3f513d9aac1e840eb1cc341a0fccb01171f7d14d10b946"
 [[package]]
 name = "eframe"
 version = "0.16.0"
-source = "git+https://github.com/emilk/egui.git#6abdde0334e9300ebe11f970a870a79cd3010835"
+source = "git+https://github.com/emilk/egui.git#89d19860b820a577f159a61aba7acfb483ff4c9c"
 dependencies = [
  "egui",
  "egui-winit",
@@ -620,7 +620,7 @@ dependencies = [
 [[package]]
 name = "egui"
 version = "0.16.1"
-source = "git+https://github.com/emilk/egui.git#6abdde0334e9300ebe11f970a870a79cd3010835"
+source = "git+https://github.com/emilk/egui.git#89d19860b820a577f159a61aba7acfb483ff4c9c"
 dependencies = [
  "ahash 0.7.6",
  "epaint",
@@ -633,7 +633,7 @@ dependencies = [
 [[package]]
 name = "egui-winit"
 version = "0.16.0"
-source = "git+https://github.com/emilk/egui.git#6abdde0334e9300ebe11f970a870a79cd3010835"
+source = "git+https://github.com/emilk/egui.git#89d19860b820a577f159a61aba7acfb483ff4c9c"
 dependencies = [
  "copypasta",
  "dark-light",
@@ -649,7 +649,7 @@ dependencies = [
 [[package]]
 name = "egui_glow"
 version = "0.16.0"
-source = "git+https://github.com/emilk/egui.git#6abdde0334e9300ebe11f970a870a79cd3010835"
+source = "git+https://github.com/emilk/egui.git#89d19860b820a577f159a61aba7acfb483ff4c9c"
 dependencies = [
  "bytemuck",
  "egui",
@@ -666,7 +666,7 @@ dependencies = [
 [[package]]
 name = "egui_web"
 version = "0.16.0"
-source = "git+https://github.com/emilk/egui.git#6abdde0334e9300ebe11f970a870a79cd3010835"
+source = "git+https://github.com/emilk/egui.git#89d19860b820a577f159a61aba7acfb483ff4c9c"
 dependencies = [
  "bytemuck",
  "egui",
@@ -689,7 +689,7 @@ checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 [[package]]
 name = "emath"
 version = "0.16.0"
-source = "git+https://github.com/emilk/egui.git#6abdde0334e9300ebe11f970a870a79cd3010835"
+source = "git+https://github.com/emilk/egui.git#89d19860b820a577f159a61aba7acfb483ff4c9c"
 dependencies = [
  "bytemuck",
  "serde",
@@ -719,7 +719,7 @@ dependencies = [
 [[package]]
 name = "epaint"
 version = "0.16.0"
-source = "git+https://github.com/emilk/egui.git#6abdde0334e9300ebe11f970a870a79cd3010835"
+source = "git+https://github.com/emilk/egui.git#89d19860b820a577f159a61aba7acfb483ff4c9c"
 dependencies = [
  "ab_glyph",
  "ahash 0.7.6",
@@ -733,7 +733,7 @@ dependencies = [
 [[package]]
 name = "epi"
 version = "0.16.0"
-source = "git+https://github.com/emilk/egui.git#6abdde0334e9300ebe11f970a870a79cd3010835"
+source = "git+https://github.com/emilk/egui.git#89d19860b820a577f159a61aba7acfb483ff4c9c"
 dependencies = [
  "directories-next",
  "egui",
@@ -747,6 +747,16 @@ name = "event-listener"
 version = "2.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77f3309417938f28bf8228fcff79a4a37103981e3e186d2ccd19c74b38f4eb71"
+
+[[package]]
+name = "fast_image_resize"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5237d5b62edc1b658259673747ca15f317d6a51b4015b20159fc64e084281b6e"
+dependencies = [
+ "num-traits",
+ "thiserror",
+]
 
 [[package]]
 name = "fastrand"
@@ -1059,9 +1069,9 @@ checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "libc"
-version = "0.2.118"
+version = "0.2.119"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06e509672465a0504304aa87f9f176f2b2b716ed8fb105ebe5c02dc6dce96a94"
+checksum = "1bf2e165bb3457c8e098ea76f3e3bc9db55f87aa90d52d0e6be741470916aaa4"
 
 [[package]]
 name = "libloading"
@@ -1925,6 +1935,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "eframe",
+ "fast_image_resize",
  "image",
  "itertools",
  "poll-promise",

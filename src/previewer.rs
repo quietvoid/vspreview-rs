@@ -9,6 +9,7 @@ use eframe::egui::Visuals;
 use eframe::epaint::Color32;
 use eframe::epaint::ColorImage;
 use eframe::epaint::Stroke;
+use eframe::epaint::Vec2;
 use eframe::{
     egui::{self, Frame},
     epi,
@@ -37,7 +38,7 @@ pub struct Previewer {
     pub reprocess: bool,
     pub replace_frame_promise: Option<FramePromise>,
 
-    pub available_size: eframe::epaint::Vec2,
+    pub available_size: Vec2,
 }
 
 #[derive(Default, Clone, serde::Deserialize, serde::Serialize)]
@@ -48,9 +49,11 @@ pub struct PreviewState {
 
     pub scale_to_window: bool,
 
+    /// Defaults to Point
+    pub scale_filter: PreviewFilterType,
+
     pub zoom_factor: f32,
-    pub translate_x: u32,
-    pub translate_y: u32,
+    pub translate: Vec2,
 }
 
 #[derive(Default)]
@@ -61,6 +64,16 @@ pub struct PreviewOutput {
 
     pub force_reprocess: bool,
     pub last_frame_no: u32,
+}
+
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
+pub enum PreviewFilterType {
+    Point,
+    Bilinear,
+    Hamming,
+    CatmullRom,
+    Mitchell,
+    Lanczos3,
 }
 
 #[derive(Clone)]
@@ -132,15 +145,10 @@ impl epi::App for Previewer {
             false
         };
 
-        let mut new_frame = Frame::default()
+        let new_frame = Frame::default()
             .fill(Color32::from_gray(24))
-            .margin(Margin::symmetric(1.0, 1.0));
-
-        // Remove margin & stroke to keep original image intact
-        if !self.state.scale_to_window {
-            new_frame.margin = Margin::symmetric(0.0, 0.0);
-            new_frame.stroke = Stroke::none();
-        }
+            .margin(Margin::symmetric(0.0, 0.0))
+            .stroke(Stroke::none());
 
         egui::CentralPanel::default()
             .frame(new_frame)
@@ -148,6 +156,9 @@ impl epi::App for Previewer {
                 if ui.input().key_pressed(Key::Q) || ui.input().key_pressed(Key::Escape) {
                     frame.quit();
                 }
+
+                let zoom_delta = ui.input().zoom_delta();
+                let scroll_delta = ui.input().scroll_delta;
 
                 *ui.visuals_mut() = Visuals::dark();
 
@@ -177,33 +188,19 @@ impl epi::App for Previewer {
                         ui.add(egui::Spinner::new().size(200.0));
                     } else if let Some(promise) = frame_promise {
                         if let Some(pf) = promise.ready() {
-                            let win_size = self.available_size;
-                            let orig_size = pf.texture.size_vec2();
-                            let mut size = orig_size;
-
-                            if self.state.scale_to_window {
-                                // Fit to width
-                                if orig_size.x != win_size.x {
-                                    size.x = win_size.x;
-                                    size.y = (size.x * orig_size.y) / orig_size.x;
-                                }
-
-                                // Fit to height
-                                if size.y > win_size.y {
-                                    size.y = win_size.y;
-                                    size.x = (size.y * orig_size.x) / orig_size.y;
-                                }
-                            }
-
+                            let size = pf.texture.size_vec2();
                             ui.image(&pf.texture, size);
 
                             if !self.rerender && self.replace_frame_promise.is_none() {
                                 self.handle_keypresses(ui);
-                                self.handle_mouse_inputs(ui);
+                                self.handle_mouse_inputs(ui, size, zoom_delta, scroll_delta);
 
                                 if ui.input().key_pressed(Key::R) {
                                     self.reload(ctx.clone(), frame.clone(), true)
                                 }
+
+                                // Check at the end of frame for reprocessing
+                                self.check_rerender(ctx, frame);
                             }
                         }
                     }
@@ -223,6 +220,7 @@ impl Previewer {
         let cur_frame_no = state.cur_frame_no;
 
         let script = self.script.clone();
+        let win_size = self.available_size;
 
         self.reload_data = Some(poll_promise::Promise::spawn_thread(
             "initialization/reload",
@@ -248,8 +246,14 @@ impl Previewer {
                 };
 
                 let vsframe = mutex.get_frame(output, cur_frame_no).unwrap();
-                let image = Arc::new(vsframe.frame_image);
-                let processed_image = process_image(image.clone(), state);
+                let image = Arc::new(vsframe.frame_image.clone());
+
+                // Return unprocess while we don't have a proper window size
+                let processed_image = if win_size.min_elem() > 0.0 {
+                    process_image(image.clone(), state, win_size)
+                } else {
+                    vsframe.frame_image
+                };
 
                 let pf = PreviewFrame {
                     image,
@@ -339,6 +343,7 @@ impl Previewer {
             self.reprocess = false;
 
             let script = self.script.clone();
+            let win_size = self.available_size;
 
             let pf = if reprocess {
                 self.get_current_frame()
@@ -353,7 +358,7 @@ impl Previewer {
 
             self.replace_frame_promise = Some(poll_promise::Promise::spawn_thread(
                 "fetch_frame",
-                move || Self::get_preview_image(ctx, frame, script, state, pf, reprocess),
+                move || Self::get_preview_image(ctx, frame, script, state, pf, reprocess, win_size),
             ));
         }
     }
@@ -380,6 +385,7 @@ impl Previewer {
         state: PreviewState,
         pf: Option<APreviewFrame>,
         reprocess: bool,
+        win_size: Vec2,
     ) -> APreviewFrame {
         // This is fine because only one promise may be executing at a time
         let mut mutex = script.lock().unwrap();
@@ -389,7 +395,7 @@ impl Previewer {
         // Reuse existing image, process and recreate texture
         let pf = if reprocess && have_existing_frame {
             let pf = pf.unwrap();
-            let processed_image = process_image(pf.image.clone(), state);
+            let processed_image = process_image(pf.image.clone(), state, win_size);
 
             PreviewFrame {
                 image: pf.image.clone(),
@@ -402,7 +408,7 @@ impl Previewer {
                 .get_frame(state.cur_output, state.cur_frame_no)
                 .unwrap();
             let image = Arc::new(vsframe.frame_image);
-            let processed_image = process_image(image.clone(), state);
+            let processed_image = process_image(image.clone(), state, win_size);
 
             PreviewFrame {
                 image,
@@ -527,10 +533,17 @@ impl Previewer {
         res
     }
 
-    fn handle_mouse_inputs(&mut self, ui: &mut Ui) {
-        let res = if ui.input().modifiers.ctrl {
+    /// Size of the image to scroll/zoom
+    fn handle_mouse_inputs(
+        &mut self,
+        ui: &mut Ui,
+        size: Vec2,
+        zoom_delta: f32,
+        scroll_delta: Vec2,
+    ) {
+        let res = if zoom_delta != 1.0 {
             // Zoom
-            let mut delta = ui.input().zoom_delta();
+            let mut delta = zoom_delta;
             let mut new_factor = self.state.zoom_factor;
 
             let zoom_modifier = if ui.input().key_pressed(Key::ArrowDown) {
@@ -565,22 +578,21 @@ impl Previewer {
                 new_factor = new_factor.clamp(MIN_ZOOM, MAX_ZOOM);
             }
 
-            if delta != 1.0 && new_factor != self.state.zoom_factor {
+            if new_factor != self.state.zoom_factor {
                 let trunc_factor = if new_factor < 1.0 { 1000.0 } else { 10.0 };
-
                 self.state.zoom_factor = (new_factor * trunc_factor).round() / trunc_factor;
 
-                true
+                !(self.state.scale_to_window && self.state.zoom_factor < 1.0)
             } else {
                 false
             }
-        } else if ui.input().modifiers.shift {
-            // Horizontal scroll
-            let dx = ui.input().scroll_delta.x;
-            false
+        } else if scroll_delta.length() > 0.0 {
+            self.state.translate -= scroll_delta;
+            self.state.translate.x = self.state.translate.x.clamp(0.0, size.x);
+            self.state.translate.y = self.state.translate.y.clamp(0.0, size.y);
+
+            true
         } else {
-            // Vertical scroll
-            let dy = ui.input().scroll_delta.y;
             false
         };
 
@@ -592,5 +604,24 @@ impl Previewer {
         }
 
         self.rerender |= res;
+    }
+}
+
+impl Default for PreviewFilterType {
+    fn default() -> Self {
+        PreviewFilterType::Point
+    }
+}
+
+impl From<PreviewFilterType> for fast_image_resize::FilterType {
+    fn from(f: PreviewFilterType) -> Self {
+        match f {
+            PreviewFilterType::Point => fast_image_resize::FilterType::Box,
+            PreviewFilterType::Bilinear => fast_image_resize::FilterType::Bilinear,
+            PreviewFilterType::Hamming => fast_image_resize::FilterType::Hamming,
+            PreviewFilterType::CatmullRom => fast_image_resize::FilterType::CatmullRom,
+            PreviewFilterType::Mitchell => fast_image_resize::FilterType::Mitchell,
+            PreviewFilterType::Lanczos3 => fast_image_resize::FilterType::Lanczos3,
+        }
     }
 }

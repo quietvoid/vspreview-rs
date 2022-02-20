@@ -5,7 +5,8 @@ WIP
 Requires OpenGL, probably other stuff. See [eframe](https://github.com/emilk/egui/tree/master/eframe) dependencies.
 
 ## Building
-`cargo build --release`
+`RUSTFLAGS="-C target-cpu=native" cargo build --release`  
+Targeting the CPU is highly recommended to get the most performance.
 
 ## Running
 `cargo run --release -- script.vpy`  

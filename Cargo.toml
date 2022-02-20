@@ -13,6 +13,11 @@ eframe = { git = "https://github.com/emilk/egui.git", features = ["persistence"]
 image = { version = "0.24", default_features = false }
 itertools = "0.10.3"
 poll-promise = "0.1.0"
+fast_image_resize = "0.7.0"
 
 serde_derive = "1.0.133"
 serde = "1.0.133"
+
+[profile.release]
+debug = true
+opt-level = 3
