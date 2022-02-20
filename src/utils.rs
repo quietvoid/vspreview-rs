@@ -1,4 +1,4 @@
-use std::{num::NonZeroU32, sync::Arc};
+use std::num::NonZeroU32;
 
 use eframe::epaint::Vec2;
 use eframe::{
@@ -14,10 +14,10 @@ use vapoursynth::prelude::{ColorFamily, FrameRef};
 use crate::previewer::PreviewState;
 
 pub const MIN_ZOOM: f32 = 0.125;
-pub const MAX_ZOOM: f32 = 50.0;
+pub const MAX_ZOOM: f32 = 64.0;
 
 /// ColorImage from 24 bits RGB
-pub fn frame_to_colorimage(frame: FrameRef) -> ColorImage {
+pub fn frame_to_colorimage(frame: &FrameRef) -> ColorImage {
     let format = frame.format();
 
     // Gray or RGB
@@ -55,8 +55,8 @@ pub fn frame_to_colorimage(frame: FrameRef) -> ColorImage {
 }
 
 pub fn process_image(
-    orig: Arc<ColorImage>,
-    state: PreviewState,
+    orig: &ColorImage,
+    state: &PreviewState,
     win_size: eframe::epaint::Vec2,
 ) -> ColorImage {
     let (src_w, src_h) = (orig.size[0] as u32, orig.size[1] as u32);
@@ -72,26 +72,19 @@ pub fn process_image(
     let win_size = win_size.round();
     let (mut w, mut h) = (src_w as f32, src_h as f32);
 
-    println!("Original {}x{}", img.width(), img.height());
-
     // FIXME: Doesn't translate properly when zoomed
-    if zoom_factor >= 1.0 {
-        println!("translate x {} y {}", tx, ty);
-
+    if tx.abs() > 0.0 || ty.abs() > 0.0 {
         w -= tx.abs();
         h -= ty.abs();
 
         // Positive = crop right part
         let x = if tx.is_sign_negative() { 0.0 } else { tx.abs() };
-
         let y = if ty.is_sign_negative() { 0.0 } else { ty.abs() };
 
         img = img.crop_imm(x as u32, y as u32, w as u32, h as u32);
     }
 
     if zoom_factor != 1.0 {
-        println!("Zoom {}", zoom_factor);
-
         if zoom_factor > 1.0 {
             w /= zoom_factor;
             h /= zoom_factor;
@@ -125,7 +118,7 @@ pub fn process_image(
         let target_size = dimensions_for_window(win_size, orig_size).round();
 
         if orig_size != target_size {
-            let fr_filter = fr::FilterType::from(state.scale_filter);
+            let fr_filter = fr::FilterType::from(&state.scale_filter);
             img = resize_fast(img, target_size.x as u32, target_size.y as u32, fr_filter);
         }
     }
@@ -136,6 +129,7 @@ pub fn process_image(
     processed
 }
 
+// Based on fast_image_resize example doc
 pub fn resize_fast(
     img: DynamicImage,
     dst_width: u32,
@@ -158,7 +152,6 @@ pub fn resize_fast(
         NonZeroU32::new(dst_height).unwrap(),
         src_image.pixel_type(),
     );
-    // Get mutable view of destination image data
     let mut dst_view = dst_image.view_mut();
 
     let mut resizer = fr::Resizer::new(fr::ResizeAlg::Convolution(filter_type));
@@ -166,6 +159,7 @@ pub fn resize_fast(
 
     let buf =
         image::ImageBuffer::from_raw(dst_width, dst_height, dst_image.buffer().to_vec()).unwrap();
+
     DynamicImage::ImageRgba8(buf)
 }
 

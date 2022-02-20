@@ -1,15 +1,9 @@
 use std::collections::HashMap;
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex, RwLock};
 
 use eframe::egui::style::Margin;
-use eframe::egui::Key;
-use eframe::egui::Ui;
-use eframe::egui::Visuals;
-use eframe::epaint::Color32;
-use eframe::epaint::ColorImage;
-use eframe::epaint::Stroke;
-use eframe::epaint::Vec2;
+use eframe::egui::{Key, Ui, Visuals};
+use eframe::epaint::{Color32, Stroke, Vec2};
 use eframe::{
     egui::{self, Frame},
     epi,
@@ -17,10 +11,11 @@ use eframe::{
 use poll_promise::Promise;
 
 use crate::utils::{process_image, MAX_ZOOM, MIN_ZOOM};
-use crate::vs_handler::PreviewedScript;
-use crate::vs_handler::VSOutput;
+use crate::vs_handler::vsframe::VSFrame;
+use crate::vs_handler::vstransform::{VSDitherAlgo, VSTransformOptions};
+use crate::vs_handler::{PreviewedScript, VSOutput};
 
-type APreviewFrame = Arc<PreviewFrame>;
+type APreviewFrame = Arc<RwLock<PreviewFrame>>;
 type FramePromise = Promise<APreviewFrame>;
 
 #[derive(Default)]
@@ -47,12 +42,15 @@ pub struct PreviewState {
     pub cur_output: i32,
     pub cur_frame_no: u32,
 
+    pub frame_transform_opts: VSTransformOptions,
+
     pub scale_to_window: bool,
 
     /// Defaults to Point
     pub scale_filter: PreviewFilterType,
 
     pub zoom_factor: f32,
+    pub zoom_multiplier: f32,
 
     pub translate: Vec2,
     pub scroll_multiplier: f32,
@@ -81,11 +79,8 @@ pub enum PreviewFilterType {
 
 #[derive(Clone)]
 pub struct PreviewFrame {
-    // Thread safe as always immutable
-    pub image: Arc<ColorImage>,
-
+    pub vsframe: VSFrame,
     pub texture: egui::TextureHandle,
-    pub frame_type: String,
 }
 
 impl epi::App for Previewer {
@@ -103,6 +98,7 @@ impl epi::App for Previewer {
             self.state = epi::get_value(storage, epi::APP_KEY).unwrap_or(PreviewState {
                 scale_to_window: true,
                 zoom_factor: 1.0,
+                zoom_multiplier: 1.0,
                 scroll_multiplier: 2.0,
                 canvas_margin: 2.0,
                 ..Default::default()
@@ -110,13 +106,25 @@ impl epi::App for Previewer {
         }
 
         self.state.cur_frame_no = 12345;
-        self.state.zoom_factor = 1.0;
         self.state.scale_to_window = false;
+        self.state.zoom_factor = 1.0;
+        self.state.zoom_multiplier = 1.0;
         self.state.translate = Vec2::ZERO;
+        self.state.scroll_multiplier = 2.0;
         self.state.canvas_margin = 10.0;
+
+        self.state.frame_transform_opts.add_dither = false;
+        self.state.frame_transform_opts.dither_algo = VSDitherAlgo::None;
 
         if self.state.scroll_multiplier <= 0.0 {
             self.state.scroll_multiplier = 1.0;
+        }
+
+        // Limit to 2.0 multiplier every zoom, should be plenty
+        if self.state.zoom_multiplier < 1.0 {
+            self.state.zoom_multiplier = 1.0;
+        } else if self.state.zoom_multiplier > 2.0 {
+            self.state.zoom_multiplier = 2.0;
         }
 
         self.reload(ctx.clone(), frame.clone(), true);
@@ -199,26 +207,33 @@ impl epi::App for Previewer {
                         ui.add(egui::Spinner::new().size(200.0));
                     } else if let Some(promise) = frame_promise {
                         if let Some(pf) = promise.ready() {
-                            let image_size: [f32; 2] = pf.image.size.map(|i| i as f32);
+                            let mut image_size: Option<[f32; 2]> = None;
 
-                            let tex_size = pf.texture.size_vec2();
-                            ui.image(&pf.texture, tex_size);
+                            if let Ok(pf) = &pf.read() {
+                                image_size = Some(pf.vsframe.frame_image.size.map(|i| i as f32));
 
-                            if !self.rerender && self.replace_frame_promise.is_none() {
-                                self.handle_keypresses(ui);
-                                self.handle_mouse_inputs(
-                                    ui,
-                                    Vec2::from(image_size),
-                                    zoom_delta,
-                                    scroll_delta,
-                                );
+                                let tex_size = pf.texture.size_vec2();
+                                ui.image(&pf.texture, tex_size);
+                            }
 
-                                if ui.input().key_pressed(Key::R) {
-                                    self.reload(ctx.clone(), frame.clone(), true)
+                            // We could read the image rendered
+                            if let Some(image_size) = image_size {
+                                if !self.rerender && self.replace_frame_promise.is_none() {
+                                    self.handle_keypresses(ui);
+                                    self.handle_mouse_inputs(
+                                        ui,
+                                        Vec2::from(image_size),
+                                        zoom_delta,
+                                        scroll_delta,
+                                    );
+
+                                    if ui.input().key_pressed(Key::R) {
+                                        self.reload(ctx.clone(), frame.clone(), true)
+                                    }
+
+                                    // Check at the end of frame for reprocessing
+                                    self.check_rerender(ctx, frame);
                                 }
-
-                                // Check at the end of frame for reprocessing
-                                self.check_rerender(ctx, frame);
                             }
                         }
                     }
@@ -263,25 +278,25 @@ impl Previewer {
                     cur_output
                 };
 
-                let vsframe = mutex.get_frame(output, cur_frame_no).unwrap();
-                let image = Arc::new(vsframe.frame_image.clone());
+                let vsframe = mutex
+                    .get_frame(output, cur_frame_no, &state.frame_transform_opts)
+                    .unwrap();
 
                 // Return unprocess while we don't have a proper window size
                 let processed_image = if win_size.min_elem() > 0.0 {
-                    process_image(image.clone(), state, win_size)
+                    process_image(&vsframe.frame_image, &state, win_size)
                 } else {
-                    vsframe.frame_image
+                    vsframe.frame_image.clone()
                 };
 
                 let pf = PreviewFrame {
-                    image,
+                    vsframe,
                     texture: ctx.load_texture("initial_frame", processed_image),
-                    frame_type: vsframe.frame_type,
                 };
 
                 frame.request_repaint();
 
-                (outputs, Arc::new(pf))
+                (outputs, Arc::new(RwLock::new(pf)))
             },
         ));
     }
@@ -367,12 +382,16 @@ impl Previewer {
                 let frame = self.get_current_frame();
 
                 if let Some(pf) = &frame {
-                    // Ignore translate when image fits already
-                    if win_size.x >= pf.image.size[0] as f32 {
-                        self.state.translate.x = 0.0;
-                    }
-                    if win_size.y >= pf.image.size[1] as f32 {
-                        self.state.translate.y = 0.0;
+                    if let Ok(pf) = pf.read() {
+                        let image = &pf.vsframe.frame_image;
+
+                        // Ignore translate when image fits already
+                        if win_size.x >= image.size[0] as f32 {
+                            self.state.translate.x = 0.0;
+                        }
+                        if win_size.y >= image.size[1] as f32 {
+                            self.state.translate.y = 0.0;
+                        }
                     }
                 }
 
@@ -425,32 +444,38 @@ impl Previewer {
         // Reuse existing image, process and recreate texture
         let pf = if reprocess && have_existing_frame {
             let pf = pf.unwrap();
-            let processed_image = process_image(pf.image.clone(), state, win_size);
 
-            PreviewFrame {
-                image: pf.image.clone(),
-                texture: ctx.load_texture("frame", processed_image),
-                frame_type: pf.frame_type.clone(),
-            }
+            if let Ok(mut pf) = pf.write() {
+                // Reprocess and update texture
+                let processed_image = process_image(&pf.vsframe.frame_image, &state, win_size);
+                pf.texture = ctx.load_texture("frame", processed_image);
+            };
+
+            pf
         } else {
+            println!("Requesting new frame");
             // Request new frame, process and recreate texture
             let vsframe = mutex
-                .get_frame(state.cur_output, state.cur_frame_no)
+                .get_frame(
+                    state.cur_output,
+                    state.cur_frame_no,
+                    &state.frame_transform_opts,
+                )
                 .unwrap();
-            let image = Arc::new(vsframe.frame_image);
-            let processed_image = process_image(image.clone(), state, win_size);
+            let processed_image = process_image(&vsframe.frame_image, &state, win_size);
 
-            PreviewFrame {
-                image,
+            let pf = RwLock::new(PreviewFrame {
+                vsframe,
                 texture: ctx.load_texture("frame", processed_image),
-                frame_type: vsframe.frame_type,
-            }
+            });
+
+            Arc::new(pf)
         };
 
         // Once frame is ready
         frame.request_repaint();
 
-        Arc::new(pf)
+        pf
     }
 
     fn handle_keypresses(&mut self, ui: &mut Ui) {
@@ -571,42 +596,47 @@ impl Previewer {
         zoom_delta: f32,
         scroll_delta: Vec2,
     ) {
-        let res = if zoom_delta != 1.0 {
-            // Zoom
-            let mut delta = zoom_delta;
-            let mut new_factor = self.state.zoom_factor;
+        let mut delta = zoom_delta;
+        let small_step = delta == 1.0
+            && ui.input().modifiers.ctrl
+            && (ui.input().key_pressed(Key::ArrowDown) || ui.input().key_pressed(Key::ArrowUp));
 
-            let zoom_modifier = if ui.input().key_pressed(Key::ArrowDown) {
+        if small_step {
+            if ui.input().key_pressed(Key::ArrowDown) {
                 delta = 0.0;
-                0.1
-            } else if ui.input().key_pressed(Key::ArrowUp) {
-                delta = 2.0;
-                0.1
             } else {
-                1.0
-            };
+                delta = 2.0;
+            }
+        }
+
+        let res = if delta != 1.0 {
+            // Zoom
+            let mut new_factor = self.state.zoom_factor;
+            let zoom_modifier = if small_step { 0.1 } else { 1.0 };
 
             // Ignore 1.0 delta, means no zoom done
             if delta < 1.0 {
                 // Smaller unzooming when below 1.0
                 if new_factor <= 1.0 {
                     new_factor -= 0.125;
+                } else if !small_step && self.state.zoom_multiplier > 1.0 {
+                    new_factor /= self.state.zoom_multiplier;
                 } else {
                     new_factor -= zoom_modifier;
                 }
-
-                new_factor = new_factor.clamp(MIN_ZOOM, MAX_ZOOM);
             } else if delta > 1.0 {
                 if new_factor < 1.0 {
                     // Zoom back from a unzoomed state
                     // Go back to no zoom
                     new_factor += 0.125;
+                } else if !small_step && self.state.zoom_multiplier > 1.0 {
+                    new_factor *= self.state.zoom_multiplier;
                 } else {
                     new_factor += zoom_modifier;
                 }
-
-                new_factor = new_factor.clamp(MIN_ZOOM, MAX_ZOOM);
             }
+
+            new_factor = new_factor.clamp(MIN_ZOOM, MAX_ZOOM);
 
             if new_factor != self.state.zoom_factor {
                 let trunc_factor = if new_factor < 1.0 { 1000.0 } else { 10.0 };
@@ -617,7 +647,11 @@ impl Previewer {
                 false
             }
         } else if scroll_delta.length() > 0.0 {
-            self.state.translate -= scroll_delta * self.state.scroll_multiplier;
+            let res_multiplier = size / self.available_size;
+            let final_delta = scroll_delta * res_multiplier * self.state.scroll_multiplier;
+
+            self.state.translate -= final_delta;
+
             let margin = self.state.canvas_margin.abs();
 
             // Left and right clipped
@@ -669,8 +703,8 @@ impl Default for PreviewFilterType {
     }
 }
 
-impl From<PreviewFilterType> for fast_image_resize::FilterType {
-    fn from(f: PreviewFilterType) -> Self {
+impl From<&PreviewFilterType> for fast_image_resize::FilterType {
+    fn from(f: &PreviewFilterType) -> Self {
         match f {
             PreviewFilterType::Point => fast_image_resize::FilterType::Box,
             PreviewFilterType::Bilinear => fast_image_resize::FilterType::Bilinear,

@@ -1,10 +1,15 @@
+pub mod vsframe;
+pub mod vsnode;
+pub mod vstransform;
+
+use vsframe::{VSFrame, VSFrameProps};
+use vsnode::VSNode;
+use vstransform::VSTransformOptions;
+
 use std::collections::HashMap;
-use std::fmt;
 use std::path::PathBuf;
 
-use eframe::epaint::ColorImage;
 use vapoursynth::prelude::*;
-use vapoursynth::video_info::VideoInfo;
 
 use crate::utils::frame_to_colorimage;
 
@@ -17,27 +22,10 @@ pub struct PreviewedScript {
     env: Option<Environment>,
 }
 
-#[derive(Debug, Default, Clone, serde::Deserialize, serde::Serialize)]
-pub struct NodeInfo {
-    pub num_frames: u32,
-    pub width: u32,
-    pub height: u32,
-    pub fr_num: u32,
-    pub fr_denom: u32,
-    pub framerate: u32,
-    pub format_name: String,
-}
-
 #[derive(Default, Clone, Debug)]
 pub struct VSOutput {
     pub index: i32,
-    pub node_info: NodeInfo,
-}
-
-#[derive(Default, Clone)]
-pub struct VSFrame {
-    pub frame_image: ColorImage,
-    pub frame_type: String,
+    pub node_info: VSNode,
 }
 
 impl PreviewedScript {
@@ -70,7 +58,7 @@ impl PreviewedScript {
                 env.get_output(i).map(|(node, _alpha)| {
                     let out = VSOutput {
                         index: i,
-                        node_info: NodeInfo::from_videoinfo(node.info()),
+                        node_info: VSNode::from_videoinfo(node.info()),
                     };
 
                     (i, out)
@@ -80,7 +68,12 @@ impl PreviewedScript {
             .collect()
     }
 
-    pub fn get_frame(&mut self, output: i32, frame_no: u32) -> Option<VSFrame> {
+    pub fn get_frame(
+        &mut self,
+        output: i32,
+        frame_no: u32,
+        opts: &VSTransformOptions,
+    ) -> Option<VSFrame> {
         let env = self.env.get_or_insert(Environment::new().unwrap());
 
         match env.get_output(output) {
@@ -97,6 +90,14 @@ impl PreviewedScript {
 
                 if let Property::Constant(f) = node.info().format {
                     let id = i32::from(f.id());
+                    let is_rgb24 = id == PresetFormat::RGB24 as i32;
+
+                    // Disable dither for RGB24 src
+                    // Always dither for GRAY/YUV src
+                    if opts.add_dither && !is_rgb24 && f.bitsPerSample >= 8 {
+                        args.set_data("dither_type", opts.dither_algo.as_str().as_bytes())
+                            .unwrap();
+                    }
 
                     let modified = match f.color_family() {
                         ColorFamily::Gray => {
@@ -114,7 +115,7 @@ impl PreviewedScript {
                             true
                         }
                         ColorFamily::RGB => {
-                            if id != PresetFormat::RGB24 as i32 {
+                            if !is_rgb24 {
                                 args.set_int("format", PresetFormat::RGB24 as i64).unwrap();
                                 true
                             } else {
@@ -125,7 +126,7 @@ impl PreviewedScript {
                     };
 
                     if modified {
-                        let rgb = resize_plugin.invoke("Spline16", &args).unwrap();
+                        let rgb = resize_plugin.invoke(opts.resizer.as_str(), &args).unwrap();
                         node = rgb.get_node("clip").unwrap();
                     }
                 } else {
@@ -133,18 +134,11 @@ impl PreviewedScript {
                 }
 
                 let frame = node.get_frame(frame_no as usize).unwrap();
-
-                let frame_type = if let Ok(frame_type) = frame.props().get_data("_PictType") {
-                    std::str::from_utf8(frame_type).unwrap().to_string()
-                } else {
-                    "N/A".to_string()
-                };
-
-                let frame_image = frame_to_colorimage(frame);
+                let frame_image = frame_to_colorimage(&frame);
 
                 Some(VSFrame {
                     frame_image,
-                    frame_type,
+                    props: VSFrameProps::from_mapref(frame.props()),
                 })
             }
             Err(e) => {
@@ -160,49 +154,5 @@ impl PreviewedScript {
 
     pub fn get_script_dir(&self) -> PathBuf {
         self.script_dir.clone()
-    }
-}
-
-impl NodeInfo {
-    fn from_videoinfo(info: VideoInfo) -> NodeInfo {
-        let (width, height) = match info.resolution {
-            Property::Constant(r) => (r.width as u32, r.height as u32),
-            Property::Variable => panic!("Only supports constant resolution!"),
-        };
-        let format = match info.format {
-            Property::Constant(f) => f,
-            Property::Variable => panic!("Unsupported format!"),
-        };
-
-        let (fr_num, fr_denom) = match info.framerate {
-            Property::Constant(fr) => (fr.numerator as u32, fr.denominator as u32),
-            Property::Variable => panic!("Only supports constant framerate!"),
-        };
-
-        NodeInfo {
-            num_frames: info.num_frames as u32,
-            width,
-            height,
-            fr_num,
-            fr_denom,
-            framerate: (fr_num as f64 / fr_denom as f64).ceil() as u32,
-            format_name: String::from(format.name()),
-        }
-    }
-}
-
-impl fmt::Display for NodeInfo {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Frames: {} | Size: {}x{} | FPS: {}/{} = {:.3} | Format: {}",
-            self.num_frames,
-            self.width,
-            self.height,
-            self.fr_num,
-            self.fr_denom,
-            (self.fr_num as f32 / self.fr_denom as f32),
-            self.format_name,
-        )
     }
 }
