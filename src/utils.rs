@@ -1,20 +1,11 @@
 use std::num::NonZeroU32;
 
-use eframe::epaint::Vec2;
-use eframe::{
-    egui,
-    epaint::{Color32, ColorImage},
-};
+use eframe::epaint::{Color32, ColorImage, Vec2};
 
 use fast_image_resize as fr;
 use image::DynamicImage;
 use itertools::izip;
 use vapoursynth::prelude::{ColorFamily, FrameRef};
-
-use crate::previewer::PreviewState;
-
-pub const MIN_ZOOM: f32 = 0.125;
-pub const MAX_ZOOM: f32 = 64.0;
 
 /// ColorImage from 24 bits RGB
 pub fn frame_to_colorimage(frame: &FrameRef) -> ColorImage {
@@ -52,105 +43,6 @@ pub fn frame_to_colorimage(frame: &FrameRef) -> ColorImage {
         size: [w, h],
         pixels,
     }
-}
-
-pub fn process_image(
-    orig: &ColorImage,
-    state: &PreviewState,
-    win_size: &eframe::epaint::Vec2,
-) -> ColorImage {
-    let src_size = Vec2::from([orig.size[0] as f32, orig.size[1] as f32]);
-    let (src_w, src_h) = (src_size.x, src_size.y);
-
-    let mut img = image_from_colorimage(orig);
-
-    let zoom_factor = state.zoom_factor;
-
-    // Rounded up
-    let win_size = win_size.round();
-    let (mut w, mut h) = (src_w as f32, src_h as f32);
-
-    // Unzoom first and foremost
-    if zoom_factor < 1.0 && !state.upscale_to_window {
-        w *= zoom_factor;
-        h *= zoom_factor;
-
-        img = resize_fast(img, w.round() as u32, h.round() as u32, fr::FilterType::Box);
-    }
-
-    if w > win_size.x || h > win_size.y || zoom_factor > 1.0 {
-        // Factors for translations relative to the image resolution
-        // -1 means no translation, 1 means translated to the bound
-        let coeffs = translate_norm_coeffs(&src_size, &win_size, zoom_factor);
-
-        let (tx_norm, ty_norm) = (state.translate_norm.x, state.translate_norm.y);
-
-        // Scale [-1, 1] coords back to pixels
-        let tx = (tx_norm.abs() * coeffs.x).round();
-        let ty = (ty_norm.abs() * coeffs.y).round();
-
-        // Positive = crop right part
-        let x = if tx_norm.is_sign_negative() { 0.0 } else { tx };
-        let y = if ty_norm.is_sign_negative() { 0.0 } else { ty };
-
-        if (tx > 0.0 || ty > 0.0) && zoom_factor <= 1.0 {
-            w -= tx;
-            h -= ty;
-        }
-
-        // Limit to window size
-        w = w.min(win_size.x);
-        h = h.min(win_size.y);
-
-        img = img.crop_imm(x as u32, y as u32, w as u32, h as u32);
-    }
-
-    // Zoom after translate
-    if zoom_factor > 1.0 {
-        // Cropped size of the zoomed zone
-        let cw = (w / zoom_factor).round();
-        let ch = (h / zoom_factor).round();
-
-        // Crop for performance, we only want the visible zoomed part
-        img = img.crop_imm(0, 0, cw as u32, ch as u32);
-
-        // Size for nearest resize, same as current image size
-        // But since we cropped, it creates the zoom effect.
-        let new_size = Vec2::new(w, h).round();
-
-        let target_size = if state.upscale_to_window {
-            // Resize up to max size of window
-            dimensions_for_window(win_size, new_size).round()
-        } else {
-            new_size
-        };
-
-        img = resize_fast(
-            img,
-            target_size.x.round() as u32,
-            target_size.y.round() as u32,
-            fr::FilterType::Box,
-        );
-    }
-
-    // Upscale small images
-    if state.upscale_to_window {
-        // Image size after crop
-        let orig_size = Vec2::new(img.width() as f32, img.height() as f32);
-
-        // Scaled size to window bounds
-        let target_size = dimensions_for_window(win_size, orig_size).round();
-
-        if orig_size != target_size {
-            let fr_filter = fr::FilterType::from(&state.upsample_filter);
-            img = resize_fast(img, target_size.x as u32, target_size.y as u32, fr_filter);
-        }
-    }
-
-    let new_size = [img.width() as usize, img.height() as usize];
-    let processed = egui::ColorImage::from_rgba_unmultiplied(new_size, img.as_bytes());
-
-    processed
 }
 
 // Based on fast_image_resize example doc

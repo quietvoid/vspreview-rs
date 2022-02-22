@@ -1,17 +1,18 @@
-pub mod vsframe;
-pub mod vsnode;
-pub mod vstransform;
-
-use vsframe::{VSFrame, VSFrameProps};
-use vsnode::VSNode;
-use vstransform::VSTransformOptions;
-
 use std::collections::HashMap;
 use std::path::PathBuf;
 
 use vapoursynth::prelude::*;
 
 use crate::utils::frame_to_colorimage;
+
+pub mod vsframe;
+pub mod vsnode;
+pub mod vstransform;
+pub mod zimg_map;
+
+pub use vsframe::{VSFrame, VSFrameProps};
+pub use vsnode::VSNode;
+pub use vstransform::*;
 
 #[derive(Default, serde::Deserialize, serde::Serialize)]
 pub struct PreviewedScript {

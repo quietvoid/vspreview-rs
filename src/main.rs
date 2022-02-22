@@ -6,11 +6,11 @@ use std::sync::{Arc, Mutex};
 
 use clap::Parser;
 
-mod previewer;
+mod preview;
 mod utils;
 mod vs_handler;
 
-use previewer::Previewer;
+use preview::Previewer;
 use vs_handler::PreviewedScript;
 
 #[derive(Parser, Debug)]
