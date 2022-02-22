@@ -57,35 +57,45 @@ pub fn frame_to_colorimage(frame: &FrameRef) -> ColorImage {
 pub fn process_image(
     orig: &ColorImage,
     state: &PreviewState,
-    win_size: eframe::epaint::Vec2,
+    win_size: &eframe::epaint::Vec2,
 ) -> ColorImage {
-    let (src_w, src_h) = (orig.size[0] as f32, orig.size[1] as f32);
+    let src_size = Vec2::from([orig.size[0] as f32, orig.size[1] as f32]);
+    let (src_w, src_h) = (src_size.x, src_size.y);
 
     let mut img = image_from_colorimage(orig);
 
     let zoom_factor = state.zoom_factor;
-    let (tx, ty) = (state.translate.x.round(), state.translate.y.round());
 
     // Rounded up
     let win_size = win_size.round();
     let (mut w, mut h) = (src_w as f32, src_h as f32);
 
     // Unzoom first and foremost
-    if zoom_factor < 1.0 {
+    if zoom_factor < 1.0 && !state.upscale_to_window {
         w *= zoom_factor;
         h *= zoom_factor;
 
         img = resize_fast(img, w.round() as u32, h.round() as u32, fr::FilterType::Box);
     }
 
-    // Positive = crop right part
-    let x = if tx.is_sign_negative() { 0.0 } else { tx.abs() };
-    let y = if ty.is_sign_negative() { 0.0 } else { ty.abs() };
-
     if w > win_size.x || h > win_size.y || zoom_factor > 1.0 {
-        if (tx.abs() > 0.0 || ty.abs() > 0.0) && zoom_factor <= 1.0 {
-            w -= tx.abs();
-            h -= ty.abs();
+        // Factors for translations relative to the image resolution
+        // -1 means no translation, 1 means translated to the bound
+        let coeffs = translate_norm_coeffs(&src_size, &win_size, zoom_factor);
+
+        let (tx_norm, ty_norm) = (state.translate_norm.x, state.translate_norm.y);
+
+        // Scale [-1, 1] coords back to pixels
+        let tx = (tx_norm.abs() * coeffs.x).round();
+        let ty = (ty_norm.abs() * coeffs.y).round();
+
+        // Positive = crop right part
+        let x = if tx_norm.is_sign_negative() { 0.0 } else { tx };
+        let y = if ty_norm.is_sign_negative() { 0.0 } else { ty };
+
+        if (tx > 0.0 || ty > 0.0) && zoom_factor <= 1.0 {
+            w -= tx;
+            h -= ty;
         }
 
         // Limit to window size
@@ -108,7 +118,7 @@ pub fn process_image(
         // But since we cropped, it creates the zoom effect.
         let new_size = Vec2::new(w, h).round();
 
-        let target_size = if state.scale_to_window {
+        let target_size = if state.upscale_to_window {
             // Resize up to max size of window
             dimensions_for_window(win_size, new_size).round()
         } else {
@@ -123,7 +133,8 @@ pub fn process_image(
         );
     }
 
-    if state.scale_to_window {
+    // Upscale small images
+    if state.upscale_to_window {
         // Image size after crop
         let orig_size = Vec2::new(img.width() as f32, img.height() as f32);
 
@@ -131,7 +142,7 @@ pub fn process_image(
         let target_size = dimensions_for_window(win_size, orig_size).round();
 
         if orig_size != target_size {
-            let fr_filter = fr::FilterType::from(&state.scale_filter);
+            let fr_filter = fr::FilterType::from(&state.upsample_filter);
             img = resize_fast(img, target_size.x as u32, target_size.y as u32, fr_filter);
         }
     }
@@ -202,4 +213,30 @@ pub fn image_from_colorimage(ci: &ColorImage) -> DynamicImage {
         src_h as u32,
         |x, y| image::Rgba(ci[(x as usize, y as usize)].to_array()),
     ))
+}
+
+// Normalize from max translate value to float with range [-1, 1]
+pub fn translate_norm_coeffs(size: &Vec2, win_size: &Vec2, zoom_factor: f32) -> Vec2 {
+    // Clips left and right
+    let max_tx = if zoom_factor > 1.0 {
+        // When zooming, the image is cropped to smallest bound
+        size.x - (win_size.x.min(size.x) / zoom_factor)
+    } else if zoom_factor < 1.0 {
+        // When unzooming, we want reduce the image size
+        // That way it might fit within the window
+        (size.x * zoom_factor) - win_size.x
+    } else {
+        size.x - win_size.x
+    };
+
+    // Clips vertically at the bottom only
+    let max_ty = if zoom_factor > 1.0 {
+        size.y - (win_size.y.min(size.y) / zoom_factor)
+    } else if zoom_factor < 1.0 {
+        (size.y * zoom_factor) - win_size.y
+    } else {
+        size.y - win_size.y
+    };
+
+    Vec2::from([max_tx, max_ty])
 }

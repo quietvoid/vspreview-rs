@@ -10,7 +10,7 @@ use eframe::{
 };
 use poll_promise::Promise;
 
-use crate::utils::{process_image, MAX_ZOOM, MIN_ZOOM};
+use crate::utils::{process_image, translate_norm_coeffs, MAX_ZOOM, MIN_ZOOM};
 use crate::vs_handler::vsframe::VSFrame;
 use crate::vs_handler::vstransform::{VSDitherAlgo, VSTransformOptions};
 use crate::vs_handler::{PreviewedScript, VSOutput};
@@ -44,15 +44,18 @@ pub struct PreviewState {
 
     pub frame_transform_opts: VSTransformOptions,
 
-    pub scale_to_window: bool,
+    // Only upscales
+    pub upscale_to_window: bool,
 
     /// Defaults to Point
-    pub scale_filter: PreviewFilterType,
+    pub upsample_filter: PreviewFilterType,
 
     pub zoom_factor: f32,
     pub zoom_multiplier: f32,
 
     pub translate: Vec2,
+    pub translate_norm: Vec2,
+
     pub scroll_multiplier: f32,
     pub canvas_margin: f32,
 }
@@ -96,7 +99,7 @@ impl epi::App for Previewer {
     ) {
         if let Some(storage) = _storage {
             self.state = epi::get_value(storage, epi::APP_KEY).unwrap_or(PreviewState {
-                scale_to_window: true,
+                upscale_to_window: true,
                 zoom_factor: 1.0,
                 zoom_multiplier: 1.0,
                 scroll_multiplier: 2.0,
@@ -105,11 +108,13 @@ impl epi::App for Previewer {
             })
         }
 
+        // FIXME: Scale to window seems to block
         self.state.cur_frame_no = 12345;
-        self.state.scale_to_window = false;
+        self.state.upscale_to_window = true;
         self.state.zoom_factor = 1.0;
         self.state.zoom_multiplier = 1.0;
         self.state.translate = Vec2::ZERO;
+        self.state.translate_norm = Vec2::ZERO;
         self.state.scroll_multiplier = 2.0;
         self.state.canvas_margin = 10.0;
 
@@ -221,8 +226,8 @@ impl epi::App for Previewer {
                                 if !self.rerender && self.replace_frame_promise.is_none() {
                                     let size = Vec2::from(image_size);
 
-                                    self.handle_keypresses(ui);
                                     self.handle_move_inputs(ui, &size, zoom_delta, scroll_delta);
+                                    self.handle_keypresses(ui);
 
                                     if ui.input().key_pressed(Key::R) {
                                         self.reload(ctx.clone(), frame.clone(), true)
@@ -281,7 +286,7 @@ impl Previewer {
 
                 // Return unprocess while we don't have a proper window size
                 let processed_image = if win_size.min_elem() > 0.0 {
-                    process_image(&vsframe.frame_image, &state, win_size)
+                    process_image(&vsframe.frame_image, &state, &win_size)
                 } else {
                     vsframe.frame_image.clone()
                 };
@@ -347,7 +352,7 @@ impl Previewer {
                     self.initialized = true;
 
                     // Force rerender once we have the initial window size
-                    if self.state.scale_to_window {
+                    if self.state.upscale_to_window {
                         self.rerender = true;
                     }
                 }
@@ -428,7 +433,7 @@ impl Previewer {
 
             if let Ok(mut pf) = pf.write() {
                 // Reprocess and update texture
-                let processed_image = process_image(&pf.vsframe.frame_image, &state, win_size);
+                let processed_image = process_image(&pf.vsframe.frame_image, &state, &win_size);
                 pf.texture = ctx.load_texture("frame", processed_image);
             };
 
@@ -443,7 +448,7 @@ impl Previewer {
                     &state.frame_transform_opts,
                 )
                 .unwrap();
-            let processed_image = process_image(&vsframe.frame_image, &state, win_size);
+            let processed_image = process_image(&vsframe.frame_image, &state, &win_size);
 
             let pf = RwLock::new(PreviewFrame {
                 vsframe,
@@ -567,6 +572,29 @@ impl Previewer {
             let old = self.outputs.get(&old_output).unwrap();
             let new = self.outputs.get(&self.state.cur_output).unwrap();
 
+            let old_node = &old.vsoutput.node_info;
+            let old_size = Vec2::from([old_node.width as f32, old_node.height as f32]);
+
+            // Update translate values
+            let new_node = &new.vsoutput.node_info;
+            let new_size = Vec2::from([new_node.width as f32, new_node.height as f32]);
+
+            if self.state.zoom_factor > 1.0 && self.state.translate_norm.length() > 0.0 {
+                if old_size.length() > new_size.length() {
+                    self.state.zoom_factor += 1.5;
+                } else if old_size.length() < new_size.length() {
+                    self.state.zoom_factor -= 1.5;
+                }
+            }
+
+            let coeffs =
+                translate_norm_coeffs(&new_size, &self.available_size, self.state.zoom_factor);
+            let (tx_norm, ty_norm) = (self.state.translate_norm.x, self.state.translate_norm.y);
+
+            // Scale [-1, 1] coords back to pixels
+            self.state.translate.x = (tx_norm.abs() * coeffs.x).round();
+            self.state.translate.y = (ty_norm.abs() * coeffs.y).round();
+
             res = old.last_frame_no != new.last_frame_no;
         }
 
@@ -644,7 +672,13 @@ impl Previewer {
                 let trunc_factor = if new_factor < 1.0 { 1000.0 } else { 10.0 };
                 self.state.zoom_factor = (new_factor * trunc_factor).round() / trunc_factor;
 
-                !(self.state.scale_to_window && self.state.zoom_factor < 1.0)
+                // It makes no sense to unzoom to scale back
+                if self.state.upscale_to_window && self.state.zoom_factor < 1.0 {
+                    self.state.zoom_factor = 1.0;
+                    false
+                } else {
+                    !(self.state.upscale_to_window && self.state.zoom_factor < 1.0)
+                }
             } else {
                 false
             }
@@ -723,42 +757,27 @@ impl Previewer {
         // Reduce (unzoom) or increase max translate (zooming)
         let zoom_factor = self.state.zoom_factor;
 
-        // Clips left and right
-        let max_tx = if zoom_factor > 1.0 {
-            // When zooming, the image is cropped to smallest bound
-            size.x - (size.x.min(win_size.x) / zoom_factor)
-        } else if zoom_factor < 1.0 {
-            // When unzooming, we want reduce the image size
-            // That way it might fit within the window
-            (size.x * zoom_factor) - win_size.x
-        } else {
-            size.x - win_size.x
-        };
-
-        // Clips vertically at the bottom only
-        let max_ty = if zoom_factor > 1.0 {
-            size.y - (win_size.y.min(size.y) / zoom_factor)
-        } else if zoom_factor < 1.0 {
-            (size.y * zoom_factor) - win_size.y
-        } else {
-            size.y - win_size.y
-        };
+        let coeffs = translate_norm_coeffs(size, &win_size, zoom_factor);
 
         // Clamp to valid translates
         // Min has to be negative to be able to detect when there's no translate
-        self.state.translate.x = if max_tx.is_sign_positive() {
-            self.state.translate.x.clamp(-1.0, max_tx)
+        self.state.translate.x = if coeffs.x.is_sign_positive() {
+            self.state.translate.x.clamp(-0.01, coeffs.x)
         } else {
             // Negative means the image isn't clipped by the window rect
             self.state.translate.x.clamp(0.0, 0.0)
         };
 
-        self.state.translate.y = if max_ty.is_sign_positive() {
-            self.state.translate.y.clamp(-1.0, max_ty)
+        self.state.translate.y = if coeffs.y.is_sign_positive() {
+            self.state.translate.y.clamp(-0.01, coeffs.y)
         } else {
             // Negative means the image isn't clipped by the window rect
             self.state.translate.y.clamp(0.0, 0.0)
         };
+
+        // Normalize to [-1, 1]
+        self.state.translate_norm.x = self.state.translate.x / coeffs.x;
+        self.state.translate_norm.y = self.state.translate.y / coeffs.y;
     }
 }
 
