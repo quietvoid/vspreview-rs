@@ -59,11 +59,13 @@ pub fn process_image(
     state: &PreviewState,
     win_size: eframe::epaint::Vec2,
 ) -> ColorImage {
-    let (src_w, src_h) = (orig.size[0] as u32, orig.size[1] as u32);
+    let (src_w, src_h) = (orig.size[0] as f32, orig.size[1] as f32);
 
-    let mut img = DynamicImage::ImageRgba8(image::ImageBuffer::from_fn(src_w, src_h, |x, y| {
-        image::Rgba(orig[(x as usize, y as usize)].to_array())
-    }));
+    let mut img = DynamicImage::ImageRgba8(image::ImageBuffer::from_fn(
+        src_w as u32,
+        src_h as u32,
+        |x, y| image::Rgba(orig[(x as usize, y as usize)].to_array()),
+    ));
 
     let zoom_factor = state.zoom_factor;
     let (tx, ty) = (state.translate.x.round(), state.translate.y.round());
@@ -72,31 +74,46 @@ pub fn process_image(
     let win_size = win_size.round();
     let (mut w, mut h) = (src_w as f32, src_h as f32);
 
-    // FIXME: Doesn't translate properly when zoomed
-    if tx.abs() > 0.0 || ty.abs() > 0.0 {
-        w -= tx.abs();
-        h -= ty.abs();
+    // Unzoom first and foremost
+    if zoom_factor < 1.0 {
+        w *= zoom_factor;
+        h *= zoom_factor;
 
-        // Positive = crop right part
-        let x = if tx.is_sign_negative() { 0.0 } else { tx.abs() };
-        let y = if ty.is_sign_negative() { 0.0 } else { ty.abs() };
+        img = resize_fast(img, w.round() as u32, h.round() as u32, fr::FilterType::Box);
+    }
+
+    // Positive = crop right part
+    let x = if tx.is_sign_negative() { 0.0 } else { tx.abs() };
+    let y = if ty.is_sign_negative() { 0.0 } else { ty.abs() };
+
+    if w > win_size.x || h > win_size.y || zoom_factor > 1.0 {
+        if (tx.abs() > 0.0 || ty.abs() > 0.0) && zoom_factor <= 1.0 {
+            w -= tx.abs();
+            h -= ty.abs();
+        }
+
+        // Limit to window size
+        w = w.min(win_size.x);
+        h = h.min(win_size.y);
 
         img = img.crop_imm(x as u32, y as u32, w as u32, h as u32);
     }
 
-    if zoom_factor != 1.0 {
-        if zoom_factor > 1.0 {
-            w /= zoom_factor;
-            h /= zoom_factor;
+    // Zoom after translate
+    if zoom_factor > 1.0 {
+        // Cropped size of the zoomed zone
+        let cw = (w / zoom_factor).round();
+        let ch = (h / zoom_factor).round();
 
-            img = img.crop_imm(0, 0, w.round() as u32, h.round() as u32);
-        }
+        // Crop for performance, we only want the visible zoomed part
+        img = img.crop_imm(0, 0, cw as u32, ch as u32);
 
-        let (w, h) = (w * zoom_factor, h * zoom_factor);
-        let new_size = Vec2::new(w as f32, h as f32).round();
+        // Size for nearest resize, same as current image size
+        // But since we cropped, it creates the zoom effect.
+        let new_size = Vec2::new(w, h).round();
 
         let target_size = if state.scale_to_window {
-            // Crop and resize up to max size of window
+            // Resize up to max size of window
             dimensions_for_window(win_size, new_size).round()
         } else {
             new_size

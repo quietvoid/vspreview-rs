@@ -379,23 +379,7 @@ impl Previewer {
             let win_size = self.available_size;
 
             let pf = if reprocess {
-                let frame = self.get_current_frame();
-
-                if let Some(pf) = &frame {
-                    if let Ok(pf) = pf.read() {
-                        let image = &pf.vsframe.frame_image;
-
-                        // Ignore translate when image fits already
-                        if win_size.x >= image.size[0] as f32 {
-                            self.state.translate.x = 0.0;
-                        }
-                        if win_size.y >= image.size[1] as f32 {
-                            self.state.translate.y = 0.0;
-                        }
-                    }
-                }
-
-                frame
+                self.get_current_frame()
             } else {
                 None
             };
@@ -596,6 +580,7 @@ impl Previewer {
         zoom_delta: f32,
         scroll_delta: Vec2,
     ) {
+        // Update zoom delta to take into consideration small step keyboard input
         let mut delta = zoom_delta;
         let small_step = delta == 1.0
             && ui.input().modifiers.ctrl
@@ -609,7 +594,10 @@ impl Previewer {
             }
         }
 
-        let res = if delta != 1.0 {
+        let win_size = self.available_size;
+
+        // Calculate zoom factor
+        let res_zoom = if delta != 1.0 {
             // Zoom
             let mut new_factor = self.state.zoom_factor;
             let zoom_modifier = if small_step { 0.1 } else { 1.0 };
@@ -646,45 +634,70 @@ impl Previewer {
             } else {
                 false
             }
-        } else if scroll_delta.length() > 0.0 {
-            let res_multiplier = size / self.available_size;
+        } else {
+            false
+        };
+
+        let old_translate = self.state.translate;
+
+        // Calculate new translates
+        let res_scroll = if scroll_delta.length() > 0.0 {
+            let res_multiplier = size / win_size;
             let final_delta = scroll_delta * res_multiplier * self.state.scroll_multiplier;
 
             self.state.translate -= final_delta;
-
-            let margin = self.state.canvas_margin.abs();
-
-            // Left and right clipped
-            let max_tx = (size.x - self.available_size.x).abs();
-
-            // Clips at the bottom only vertically
-            let max_ty = (size.y - self.available_size.y).abs();
-
-            // With 2px margin to be able to see the edge
-            self.state.translate.x = if max_tx.is_sign_positive() {
-                self.state
-                    .translate
-                    .x
-                    .clamp(-max_tx - margin, max_tx + margin)
-            } else {
-                // Negative means the image isn't clipped by the window rect
-                self.state.translate.x.clamp(0.0, 0.0)
-            };
-
-            self.state.translate.y = if max_ty.is_sign_positive() {
-                self.state
-                    .translate
-                    .y
-                    .clamp(-max_ty - margin, max_ty + margin)
-            } else {
-                // Negative means the image isn't clipped by the window rect
-                self.state.translate.y.clamp(0.0, 0.0)
-            };
 
             true
         } else {
             false
         };
+
+        // NOTE: We are outside the scroll_delta condition
+        // Because we want to modify the translations on zoom as well
+
+        // Updated zoom factor
+        // We need the new zoom factor to be able to correct invalid translations
+        // Reduce (unzoom) or increase max translate (zooming)
+        let zoom_factor = self.state.zoom_factor;
+
+        // Clips left and right
+        let max_tx = if zoom_factor > 1.0 {
+            // When zooming, the image is cropped to smallest bound
+            size.x - (size.x.min(win_size.x) / zoom_factor)
+        } else if zoom_factor < 1.0 {
+            // When unzooming, we want reduce the image size
+            // That way it might fit within the window
+            (size.x * zoom_factor) - win_size.x
+        } else {
+            size.x - win_size.x
+        };
+
+        // Clips vertically at the bottom only
+        let max_ty = if zoom_factor > 1.0 {
+            size.y - (win_size.y.min(size.y) / zoom_factor)
+        } else if zoom_factor < 1.0 {
+            (size.y * zoom_factor) - win_size.y
+        } else {
+            size.y - win_size.y
+        };
+
+        // Clamp to valid translates
+        // Min has to be negative to be able to detect when there's no translate
+        self.state.translate.x = if max_tx.is_sign_positive() {
+            self.state.translate.x.clamp(-1.0, max_tx)
+        } else {
+            // Negative means the image isn't clipped by the window rect
+            self.state.translate.x.clamp(0.0, 0.0)
+        };
+
+        self.state.translate.y = if max_ty.is_sign_positive() {
+            self.state.translate.y.clamp(-1.0, max_ty)
+        } else {
+            // Negative means the image isn't clipped by the window rect
+            self.state.translate.y.clamp(0.0, 0.0)
+        };
+
+        let res = res_zoom | (res_scroll && old_translate != self.state.translate);
 
         // Set other outputs to reprocess if we're modifying the image
         if res {
