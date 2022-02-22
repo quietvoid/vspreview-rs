@@ -219,13 +219,10 @@ impl epi::App for Previewer {
                             // We could read the image rendered
                             if let Some(image_size) = image_size {
                                 if !self.rerender && self.replace_frame_promise.is_none() {
+                                    let size = Vec2::from(image_size);
+
                                     self.handle_keypresses(ui);
-                                    self.handle_move_inputs(
-                                        ui,
-                                        Vec2::from(image_size),
-                                        zoom_delta,
-                                        scroll_delta,
-                                    );
+                                    self.handle_move_inputs(ui, &size, zoom_delta, scroll_delta);
 
                                     if ui.input().key_pressed(Key::R) {
                                         self.reload(ctx.clone(), frame.clone(), true)
@@ -577,7 +574,13 @@ impl Previewer {
     }
 
     /// Size of the image to scroll/zoom, not the final texture
-    fn handle_move_inputs(&mut self, ui: &mut Ui, size: Vec2, zoom_delta: f32, scroll_delta: Vec2) {
+    fn handle_move_inputs(
+        &mut self,
+        ui: &mut Ui,
+        size: &Vec2,
+        zoom_delta: f32,
+        scroll_delta: Vec2,
+    ) {
         // Update zoom delta to take into consideration small step keyboard input
         let mut delta = zoom_delta;
         let small_step = delta == 1.0
@@ -653,7 +656,7 @@ impl Previewer {
 
         // Calculate new translates
         let res_scroll = if scroll_delta.length() > 0.0 {
-            let res_multiplier = size / win_size;
+            let res_multiplier = *size / win_size;
             let final_delta = scroll_delta * res_multiplier * self.state.scroll_multiplier;
 
             self.state.translate -= final_delta;
@@ -665,48 +668,7 @@ impl Previewer {
 
         // NOTE: We are outside the scroll_delta condition
         // Because we want to modify the translations on zoom as well
-
-        // Updated zoom factor
-        // We need the new zoom factor to be able to correct invalid translations
-        // Reduce (unzoom) or increase max translate (zooming)
-        let zoom_factor = self.state.zoom_factor;
-
-        // Clips left and right
-        let max_tx = if zoom_factor > 1.0 {
-            // When zooming, the image is cropped to smallest bound
-            size.x - (size.x.min(win_size.x) / zoom_factor)
-        } else if zoom_factor < 1.0 {
-            // When unzooming, we want reduce the image size
-            // That way it might fit within the window
-            (size.x * zoom_factor) - win_size.x
-        } else {
-            size.x - win_size.x
-        };
-
-        // Clips vertically at the bottom only
-        let max_ty = if zoom_factor > 1.0 {
-            size.y - (win_size.y.min(size.y) / zoom_factor)
-        } else if zoom_factor < 1.0 {
-            (size.y * zoom_factor) - win_size.y
-        } else {
-            size.y - win_size.y
-        };
-
-        // Clamp to valid translates
-        // Min has to be negative to be able to detect when there's no translate
-        self.state.translate.x = if max_tx.is_sign_positive() {
-            self.state.translate.x.clamp(-1.0, max_tx)
-        } else {
-            // Negative means the image isn't clipped by the window rect
-            self.state.translate.x.clamp(0.0, 0.0)
-        };
-
-        self.state.translate.y = if max_ty.is_sign_positive() {
-            self.state.translate.y.clamp(-1.0, max_ty)
-        } else {
-            // Negative means the image isn't clipped by the window rect
-            self.state.translate.y.clamp(0.0, 0.0)
-        };
+        self.correct_translation_bounds(size);
 
         let res = res_zoom | (res_scroll && old_translate != self.state.translate);
 
@@ -751,6 +713,52 @@ impl Previewer {
         } else {
             println!("Apparently the script is busy rendering a frame, try again later");
         }
+    }
+
+    fn correct_translation_bounds(&mut self, size: &Vec2) {
+        let win_size = self.available_size;
+
+        // Updated zoom factor
+        // We need the new zoom factor to be able to correct invalid translations
+        // Reduce (unzoom) or increase max translate (zooming)
+        let zoom_factor = self.state.zoom_factor;
+
+        // Clips left and right
+        let max_tx = if zoom_factor > 1.0 {
+            // When zooming, the image is cropped to smallest bound
+            size.x - (size.x.min(win_size.x) / zoom_factor)
+        } else if zoom_factor < 1.0 {
+            // When unzooming, we want reduce the image size
+            // That way it might fit within the window
+            (size.x * zoom_factor) - win_size.x
+        } else {
+            size.x - win_size.x
+        };
+
+        // Clips vertically at the bottom only
+        let max_ty = if zoom_factor > 1.0 {
+            size.y - (win_size.y.min(size.y) / zoom_factor)
+        } else if zoom_factor < 1.0 {
+            (size.y * zoom_factor) - win_size.y
+        } else {
+            size.y - win_size.y
+        };
+
+        // Clamp to valid translates
+        // Min has to be negative to be able to detect when there's no translate
+        self.state.translate.x = if max_tx.is_sign_positive() {
+            self.state.translate.x.clamp(-1.0, max_tx)
+        } else {
+            // Negative means the image isn't clipped by the window rect
+            self.state.translate.x.clamp(0.0, 0.0)
+        };
+
+        self.state.translate.y = if max_ty.is_sign_positive() {
+            self.state.translate.y.clamp(-1.0, max_ty)
+        } else {
+            // Negative means the image isn't clipped by the window rect
+            self.state.translate.y.clamp(0.0, 0.0)
+        };
     }
 }
 
