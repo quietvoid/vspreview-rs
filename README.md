@@ -33,6 +33,6 @@ Scroll vertically: PageUp/PageDown, Scroll
 
 Reload script: R, Ctrl+R  
 
-Show OSD info: I (toggle)  
+Show GUI: I (toggle)  
 Take a screenshot: S (saves to script directory)  
 Close: Escape, Q  

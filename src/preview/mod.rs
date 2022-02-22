@@ -26,6 +26,8 @@ type FramePromise = Promise<APreviewFrame>;
 #[derive(Default, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct PreviewState {
+    pub show_gui: bool,
+
     pub cur_output: i32,
     pub cur_frame_no: u32,
 
@@ -33,8 +35,7 @@ pub struct PreviewState {
 
     // Only upscales
     pub upscale_to_window: bool,
-
-    /// Defaults to Point
+    /// Defaults to Bilinear
     pub upsample_filter: PreviewFilterType,
 
     pub zoom_factor: f32,

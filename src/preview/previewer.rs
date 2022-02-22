@@ -23,6 +23,8 @@ pub struct Previewer {
     pub replace_frame_promise: Option<FramePromise>,
 
     pub available_size: Vec2,
+
+    pub inputs_focused: HashMap<&'static str, bool>,
 }
 
 impl Previewer {
@@ -247,7 +249,10 @@ impl Previewer {
 
             if output.force_reprocess {
                 self.rerender = true;
-                self.reprocess = true;
+
+                // Reprocess only if the output is already the correct frame
+                self.reprocess = output.last_frame_no == self.state.cur_frame_no;
+
                 output.force_reprocess = false;
             }
         }
@@ -321,7 +326,8 @@ impl Previewer {
 
             pf
         } else {
-            println!("Requesting new frame");
+            // println!("Requesting new frame");
+
             // Request new frame, process and recreate texture
             let vsframe = mutex
                 .get_frame(
@@ -590,9 +596,7 @@ impl Previewer {
 
         // Set other outputs to reprocess if we're modifying the image
         if res {
-            self.outputs
-                .values_mut()
-                .for_each(|out| out.force_reprocess = true);
+            self.reprocess_outputs();
         }
 
         self.rerender |= res;
@@ -660,5 +664,15 @@ impl Previewer {
         // Normalize to [-1, 1]
         self.state.translate_norm.x = self.state.translate.x / coeffs.x;
         self.state.translate_norm.y = self.state.translate.y / coeffs.y;
+    }
+
+    pub fn any_input_focused(&self) -> bool {
+        self.inputs_focused.values().any(|e| *e)
+    }
+
+    pub fn reprocess_outputs(&mut self) {
+        self.outputs
+            .values_mut()
+            .for_each(|o| o.force_reprocess = true);
     }
 }
