@@ -10,7 +10,7 @@ license = "GPL-3.0"
 vapoursynth = { git = "https://github.com/YaLTeR/vapoursynth-rs.git", features = ["vapoursynth-api-36", "vapoursynth-functions", "vsscript-api-32", "vsscript-functions"] }
 clap = { version = "3.1.0", features = ["derive", "wrap_help"] }
 eframe = { git = "https://github.com/emilk/egui.git", features = ["persistence"] }
-image = { version = "0.24", default_features = false }
+image = { version = "0.24", default_features = false, features = ["png"] }
 itertools = "0.10.3"
 poll-promise = "0.1.0"
 fast_image_resize = "0.7.0"

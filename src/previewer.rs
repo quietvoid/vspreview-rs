@@ -220,7 +220,7 @@ impl epi::App for Previewer {
                             if let Some(image_size) = image_size {
                                 if !self.rerender && self.replace_frame_promise.is_none() {
                                     self.handle_keypresses(ui);
-                                    self.handle_mouse_inputs(
+                                    self.handle_move_inputs(
                                         ui,
                                         Vec2::from(image_size),
                                         zoom_delta,
@@ -466,6 +466,10 @@ impl Previewer {
         let mut rerender = self.check_update_seek(ui);
         rerender |= self.check_update_output(ui);
 
+        if ui.input().key_pressed(Key::S) {
+            self.save_screenshot();
+        }
+
         self.rerender = rerender;
     }
 
@@ -573,13 +577,7 @@ impl Previewer {
     }
 
     /// Size of the image to scroll/zoom, not the final texture
-    fn handle_mouse_inputs(
-        &mut self,
-        ui: &mut Ui,
-        size: Vec2,
-        zoom_delta: f32,
-        scroll_delta: Vec2,
-    ) {
+    fn handle_move_inputs(&mut self, ui: &mut Ui, size: Vec2, zoom_delta: f32, scroll_delta: Vec2) {
         // Update zoom delta to take into consideration small step keyboard input
         let mut delta = zoom_delta;
         let small_step = delta == 1.0
@@ -592,6 +590,19 @@ impl Previewer {
             } else {
                 delta = 2.0;
             }
+        }
+
+        let mut scroll_delta = scroll_delta;
+
+        // Keyboard based scrolling
+        if ui.input().key_pressed(Key::End) {
+            scroll_delta.x = -50.0;
+        } else if ui.input().key_pressed(Key::Home) {
+            scroll_delta.x = 50.0;
+        } else if ui.input().key_pressed(Key::PageDown) {
+            scroll_delta.y = -50.0;
+        } else if ui.input().key_pressed(Key::PageUp) {
+            scroll_delta.y = 50.0;
         }
 
         let win_size = self.available_size;
@@ -707,6 +718,39 @@ impl Previewer {
         }
 
         self.rerender |= res;
+    }
+
+    fn save_screenshot(&self) {
+        if let Ok(script) = self.script.try_lock() {
+            let mut save_path = script.get_script_dir();
+
+            let screen_file = format!(
+                "vspreview-rs_out{}_{}.png",
+                self.state.cur_output, self.state.cur_frame_no
+            );
+            save_path.push(screen_file);
+
+            let output = self.outputs.get(&self.state.cur_output).unwrap();
+            if let Some(promise) = &output.frame_promise {
+                if let Some(pf) = promise.ready() {
+                    if let Ok(pf) = &pf.read() {
+                        let img = crate::utils::image_from_colorimage(&pf.vsframe.frame_image);
+                        img.save_with_format(&save_path, image::ImageFormat::Png)
+                            .unwrap();
+                    } else {
+                        println!("Apparently the frame is being written to");
+                    }
+                } else {
+                    println!("Apparently the frame is not ready yet");
+                }
+            } else {
+                println!("Apparently there are no frames for the current output");
+            }
+
+            println!("Screenshot saved to {}", &save_path.to_str().unwrap());
+        } else {
+            println!("Apparently the script is busy rendering a frame, try again later");
+        }
     }
 }
 

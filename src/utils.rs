@@ -61,11 +61,7 @@ pub fn process_image(
 ) -> ColorImage {
     let (src_w, src_h) = (orig.size[0] as f32, orig.size[1] as f32);
 
-    let mut img = DynamicImage::ImageRgba8(image::ImageBuffer::from_fn(
-        src_w as u32,
-        src_h as u32,
-        |x, y| image::Rgba(orig[(x as usize, y as usize)].to_array()),
-    ));
+    let mut img = image_from_colorimage(orig);
 
     let zoom_factor = state.zoom_factor;
     let (tx, ty) = (state.translate.x.round(), state.translate.y.round());
@@ -196,4 +192,14 @@ pub fn dimensions_for_window(win_size: Vec2, orig_size: Vec2) -> Vec2 {
     }
 
     size
+}
+
+pub fn image_from_colorimage(ci: &ColorImage) -> DynamicImage {
+    let (src_w, src_h) = (ci.size[0] as f32, ci.size[1] as f32);
+
+    DynamicImage::ImageRgba8(image::ImageBuffer::from_fn(
+        src_w as u32,
+        src_h as u32,
+        |x, y| image::Rgba(ci[(x as usize, y as usize)].to_array()),
+    ))
 }
