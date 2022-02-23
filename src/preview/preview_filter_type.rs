@@ -10,7 +10,7 @@ pub enum PreviewFilterType {
     Lanczos3,
 }
 
-/// Filter type to use with fir
+/// Filter type to use with fast_image_resize
 impl Default for PreviewFilterType {
     fn default() -> Self {
         PreviewFilterType::Point

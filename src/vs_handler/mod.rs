@@ -135,12 +135,10 @@ impl PreviewedScript {
                 }
 
                 let frame = node.get_frame(frame_no as usize).unwrap();
+                let props = VSFrameProps::from_mapref(frame.props());
                 let frame_image = frame_to_colorimage(&frame);
 
-                Some(VSFrame {
-                    frame_image,
-                    props: VSFrameProps::from_mapref(frame.props()),
-                })
+                Some(VSFrame { frame_image, props })
             }
             Err(e) => {
                 println!("{:?}", e);

@@ -31,6 +31,11 @@ pub struct PreviewState {
     pub cur_output: i32,
     pub cur_frame_no: u32,
 
+    pub zoom_factor: f32,
+
+    pub translate: Vec2,
+    pub translate_norm: Vec2,
+
     pub frame_transform_opts: VSTransformOptions,
 
     // Only upscales
@@ -38,11 +43,7 @@ pub struct PreviewState {
     /// Defaults to Bilinear
     pub upsample_filter: PreviewFilterType,
 
-    pub zoom_factor: f32,
     pub zoom_multiplier: f32,
-
-    pub translate: Vec2,
-    pub translate_norm: Vec2,
 
     pub scroll_multiplier: f32,
     pub canvas_margin: f32,

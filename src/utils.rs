@@ -132,3 +132,17 @@ pub fn translate_norm_coeffs(size: &Vec2, win_size: &Vec2, zoom_factor: f32) -> 
 
     Vec2::from([max_tx, max_ty])
 }
+
+pub fn translate_norm_to_pixels(
+    translate_norm: &Vec2,
+    size: &Vec2,
+    win_size: &Vec2,
+    zoom_factor: f32,
+) -> Vec2 {
+    let coeffs = translate_norm_coeffs(&size, &win_size, zoom_factor);
+
+    Vec2::from([
+        (translate_norm.x * coeffs.x).round(),
+        (translate_norm.y * coeffs.y).round(),
+    ])
+}

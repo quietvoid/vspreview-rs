@@ -202,11 +202,6 @@ impl Previewer {
                     })
                     .collect();
 
-                println!("Got outputs: {:?}", &self.outputs.len());
-                self.outputs
-                    .values()
-                    .for_each(|o| println!("{:?}", o.vsoutput));
-
                 if !data.0.contains_key(&self.state.cur_output) {
                     // Fallback to first output in order
                     let mut keys: Vec<&i32> = data.0.keys().collect();
@@ -447,46 +442,14 @@ impl Previewer {
             -1
         };
 
-        let mut res = if new_output >= 0 && self.outputs.contains_key(&new_output) {
+        if new_output >= 0 && self.outputs.contains_key(&new_output) {
             self.state.cur_output = new_output;
 
-            true
+            // Changed output
+            self.output_needs_rerender(old_output)
         } else {
             false
-        };
-
-        // Changed output
-        if res {
-            let old = self.outputs.get(&old_output).unwrap();
-            let new = self.outputs.get(&self.state.cur_output).unwrap();
-
-            let old_node = &old.vsoutput.node_info;
-            let old_size = Vec2::from([old_node.width as f32, old_node.height as f32]);
-
-            // Update translate values
-            let new_node = &new.vsoutput.node_info;
-            let new_size = Vec2::from([new_node.width as f32, new_node.height as f32]);
-
-            if self.state.zoom_factor > 1.0 && self.state.translate_norm.length() > 0.0 {
-                if old_size.length() > new_size.length() {
-                    self.state.zoom_factor += 1.5;
-                } else if old_size.length() < new_size.length() {
-                    self.state.zoom_factor -= 1.5;
-                }
-            }
-
-            let coeffs =
-                translate_norm_coeffs(&new_size, &self.available_size, self.state.zoom_factor);
-            let (tx_norm, ty_norm) = (self.state.translate_norm.x, self.state.translate_norm.y);
-
-            // Scale [-1, 1] coords back to pixels
-            self.state.translate.x = (tx_norm.abs() * coeffs.x).round();
-            self.state.translate.y = (ty_norm.abs() * coeffs.y).round();
-
-            res = old.last_frame_no != new.last_frame_no;
         }
-
-        res
     }
 
     /// Size of the image to scroll/zoom, not the final texture
@@ -554,19 +517,19 @@ impl Previewer {
                 }
             }
 
-            new_factor = new_factor.clamp(MIN_ZOOM, MAX_ZOOM);
+            let min = if self.state.upscale_to_window {
+                1.0
+            } else {
+                MIN_ZOOM
+            };
+
+            new_factor = new_factor.clamp(min, MAX_ZOOM);
 
             if new_factor != self.state.zoom_factor {
                 let trunc_factor = if new_factor < 1.0 { 1000.0 } else { 10.0 };
                 self.state.zoom_factor = (new_factor * trunc_factor).round() / trunc_factor;
 
-                // It makes no sense to unzoom to scale back
-                if self.state.upscale_to_window && self.state.zoom_factor < 1.0 {
-                    self.state.zoom_factor = 1.0;
-                    false
-                } else {
-                    !(self.state.upscale_to_window && self.state.zoom_factor < 1.0)
-                }
+                true
             } else {
                 false
             }
@@ -592,7 +555,7 @@ impl Previewer {
         // Because we want to modify the translations on zoom as well
         self.correct_translation_bounds(size);
 
-        let res = res_zoom | (res_scroll && old_translate != self.state.translate);
+        let res = res_zoom || (res_scroll && old_translate != self.state.translate);
 
         // Set other outputs to reprocess if we're modifying the image
         if res {
@@ -664,6 +627,64 @@ impl Previewer {
         // Normalize to [-1, 1]
         self.state.translate_norm.x = self.state.translate.x / coeffs.x;
         self.state.translate_norm.y = self.state.translate.y / coeffs.y;
+    }
+
+    // Update zoom/translate for the new output
+    // Returns if we need to rerender
+    pub fn output_needs_rerender(&mut self, old_output: i32) -> bool {
+        let old = self.outputs.get(&old_output).unwrap();
+        let new = self.outputs.get(&self.state.cur_output).unwrap();
+
+        let old_node = &old.vsoutput.node_info;
+        let old_size = Vec2::from([old_node.width as f32, old_node.height as f32]);
+
+        // Update translate values
+        let new_node = &new.vsoutput.node_info;
+        let new_size = Vec2::from([new_node.width as f32, new_node.height as f32]);
+
+        if self.state.zoom_factor > 1.0 && self.state.translate_norm.length() > 0.0 {
+            if old_size.length() > new_size.length() {
+                self.state.zoom_factor += 1.5;
+            } else if old_size.length() < new_size.length() {
+                self.state.zoom_factor -= 1.5;
+            }
+        }
+
+        let coeffs = translate_norm_coeffs(&new_size, &self.available_size, self.state.zoom_factor);
+        let (tx_norm, ty_norm) = (self.state.translate_norm.x, self.state.translate_norm.y);
+
+        // Scale [-1, 1] coords back to pixels
+        self.state.translate.x = (tx_norm.abs() * coeffs.x).round();
+        self.state.translate.y = (ty_norm.abs() * coeffs.y).round();
+
+        old.last_frame_no != new.last_frame_no
+    }
+
+    pub fn correct_translate_for_current_output(&mut self) {
+        let info = {
+            let output = self.outputs.get(&self.state.cur_output).unwrap();
+            output.vsoutput.node_info.clone()
+        };
+
+        self.correct_translation_bounds(&Vec2::from([info.width as f32, info.height as f32]));
+
+        self.reprocess_outputs();
+    }
+
+    pub fn update_pixels_translation_for_current_output(&mut self) {
+        let info = {
+            let output = self.outputs.get(&self.state.cur_output).unwrap();
+            output.vsoutput.node_info.clone()
+        };
+
+        self.state.translate = crate::utils::translate_norm_to_pixels(
+            &self.state.translate_norm,
+            &Vec2::from([info.width as f32, info.height as f32]),
+            &self.available_size,
+            self.state.zoom_factor,
+        );
+
+        self.correct_translate_for_current_output();
     }
 
     pub fn any_input_focused(&self) -> bool {

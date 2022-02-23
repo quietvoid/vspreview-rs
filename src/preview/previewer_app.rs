@@ -1,13 +1,17 @@
 use eframe::egui::style::Margin;
-use eframe::egui::{Key, Visuals};
+use eframe::egui::{DragValue, Key, RichText, Visuals};
 use eframe::epaint::{self, Color32, Stroke, Vec2};
 use eframe::{
     egui::{self, Frame},
     epi,
 };
 
+use itertools::Itertools;
+
 use super::*;
 use vstransform::VSDitherAlgo;
+
+const STATE_LABEL_COLOR: Color32 = Color32::from_gray(160);
 
 impl epi::App for Previewer {
     fn name(&self) -> &str {
@@ -22,7 +26,7 @@ impl epi::App for Previewer {
     ) {
         if let Some(storage) = _storage {
             self.state = epi::get_value(storage, epi::APP_KEY).unwrap_or(PreviewState {
-                upscale_to_window: true,
+                upscale_to_window: false,
                 zoom_factor: 1.0,
                 zoom_multiplier: 1.0,
                 scroll_multiplier: 1.0,
@@ -33,7 +37,7 @@ impl epi::App for Previewer {
         }
 
         self.state.cur_frame_no = 12345;
-        self.state.upscale_to_window = true;
+        self.state.upscale_to_window = false;
         self.state.zoom_factor = 1.0;
         self.state.zoom_multiplier = 1.0;
         self.state.translate = Vec2::ZERO;
@@ -139,9 +143,23 @@ impl epi::App for Previewer {
 
 impl Previewer {
     fn draw_state_window(&mut self, ctx: &egui::Context) {
-        egui::Window::new("State").show(ctx, |ui| {
-            ui.label("Hello World!");
-        });
+        let has_current_output =
+            !self.outputs.is_empty() && self.outputs.contains_key(&self.state.cur_output);
+
+        egui::Window::new("State")
+            .resizable(false)
+            .collapsible(false)
+            .show(ctx, |ui| {
+                self.output_select_ui(ui);
+                self.zoom_slider_ui(ui);
+                self.translate_drag_ui(ui);
+
+                if has_current_output {
+                    ui.separator();
+
+                    self.frameprops_ui(ui);
+                }
+            });
     }
 
     fn draw_centered_image(&mut self, ctx: &egui::Context, frame: &epi::Frame, ui: &mut egui::Ui) {
@@ -265,5 +283,105 @@ impl Previewer {
                     .size(20.0);
                 ui.label(node_info_label);
             });
+    }
+
+    pub fn output_select_ui(&mut self, ui: &mut egui::Ui) {
+        let old_output = self.state.cur_output;
+        let mut new_output = old_output;
+
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("Output").color(STATE_LABEL_COLOR));
+
+            egui::ComboBox::from_id_source(egui::Id::new("output_select"))
+                .selected_text(format!("Output {}", new_output))
+                .show_ui(ui, |ui| {
+                    for i in self.outputs.keys().sorted() {
+                        ui.selectable_value(&mut new_output, *i, format!("Output {}", i));
+                    }
+                });
+        });
+
+        // Changed output
+        if new_output != old_output {
+            self.state.cur_output = new_output;
+
+            if self.output_needs_rerender(old_output) {
+                self.rerender = true;
+            }
+        }
+    }
+
+    pub fn zoom_slider_ui(&mut self, ui: &mut egui::Ui) {
+        let old_zoom = self.state.zoom_factor;
+        let mut new_zoom = old_zoom;
+
+        ui.horizontal(|ui| {
+            let zoom_range = MIN_ZOOM..=MAX_ZOOM;
+            let frames_slider = egui::Slider::new(&mut new_zoom, zoom_range).max_decimals(3);
+
+            ui.label(RichText::new("Zoom factor").color(STATE_LABEL_COLOR));
+            ui.add(frames_slider);
+        });
+
+        if new_zoom != old_zoom {
+            self.state.zoom_factor = new_zoom;
+            self.rerender = true;
+
+            self.correct_translate_for_current_output();
+        }
+    }
+
+    pub fn translate_drag_ui(&mut self, ui: &mut egui::Ui) {
+        let old_translate = self.state.translate_norm;
+        let mut new_translate = old_translate;
+
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("Translate").color(STATE_LABEL_COLOR));
+
+            let x_drag = DragValue::new(&mut new_translate.x)
+                .speed(0.01)
+                .clamp_range(-0.01..=1.0)
+                .max_decimals(3);
+
+            let y_drag = DragValue::new(&mut new_translate.y)
+                .speed(0.01)
+                .clamp_range(-0.01..=1.0)
+                .max_decimals(3);
+
+            ui.label(RichText::new("x").color(STATE_LABEL_COLOR));
+            ui.add(x_drag);
+            ui.label(RichText::new("y").color(STATE_LABEL_COLOR));
+            ui.add(y_drag);
+        });
+
+        if new_translate != old_translate && new_translate.length() > 0.0 {
+            self.state.translate_norm = new_translate;
+
+            self.update_pixels_translation_for_current_output();
+            self.rerender = true;
+        }
+    }
+
+    pub fn frameprops_ui(&mut self, ui: &mut egui::Ui) {
+        let output = self.outputs.get(&self.state.cur_output).unwrap();
+        let mut props = None;
+
+        if let Some(promise) = &output.frame_promise {
+            if let Some(pf) = promise.ready() {
+                if let Ok(pf) = &pf.read() {
+                    props = Some(pf.vsframe.props.clone())
+                }
+            }
+        }
+
+        if let Some(props) = props {
+            let header = RichText::new("Frame props").color(STATE_LABEL_COLOR);
+
+            ui.collapsing(header, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                });
+            });
+        }
     }
 }
