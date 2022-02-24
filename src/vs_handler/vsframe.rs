@@ -11,18 +11,21 @@ pub struct VSFrame {
 
 #[derive(Default, Debug, Clone)]
 pub struct VSFrameProps {
-    frame_type: String,
+    pub frame_type: String,
 
-    color_range: VSPixelRange,
-    chromaloc: VSChromaLoc,
+    pub color_range: VSColorRange,
+    pub chroma_location: Option<VSChromaLocation>,
 
-    primaries: VSPrimaries,
-    matrix: VSMatrix,
-    transfer: VSTransferCharacteristics,
+    pub primaries: VSPrimaries,
+    pub matrix: VSMatrix,
+    pub transfer: VSTransferCharacteristics,
 
-    is_scenecut: Option<bool>,
+    pub is_scenecut: Option<bool>,
+    pub is_dolbyvision: bool,
+    pub cambi_score: Option<f64>,
 }
 
+/// Reserved props
 const KEY_FRAME_TYPE: &str = "_PictType";
 const KEY_COLOR_RANGE: &str = "_ColorRange";
 const KEY_CHROMALOC: &str = "_ChromaLocation";
@@ -30,6 +33,10 @@ const KEY_PRIMARIES: &str = "_Primaries";
 const KEY_MATRIX: &str = "_Matrix";
 const KEY_TRANSFER: &str = "_Transfer";
 const KEY_SCENE_CUT: &str = "_SceneChangePrev";
+
+/// Potentially relevant props
+const KEY_DOVI_RPU: &str = "DolbyVisionRPU";
+const KEY_CAMBI: &str = "CAMBI";
 
 impl VSFrameProps {
     // Only reserved frame props
@@ -43,12 +50,7 @@ impl VSFrameProps {
         let color_range = map
             .get_int(KEY_COLOR_RANGE)
             .map(|v| v as u8)
-            .map_or(VSPixelRange::default(), VSPixelRange::from);
-
-        let chromaloc = map
-            .get_int(KEY_CHROMALOC)
-            .map(|v| v as u8)
-            .map_or(VSChromaLoc::default(), VSChromaLoc::from);
+            .map_or(VSColorRange::default(), VSColorRange::from);
 
         let primaries = map
             .get_int(KEY_PRIMARIES)
@@ -65,16 +67,25 @@ impl VSFrameProps {
             VSTransferCharacteristics::from,
         );
 
+        let chroma_location = map
+            .get_int(KEY_CHROMALOC)
+            .ok()
+            .map(|v| VSChromaLocation::from(v as u8));
+
         let is_scenecut = map.get_int(KEY_SCENE_CUT).map_or(None, |v| Some(v != 0));
+        let is_dolbyvision = map.value_count(KEY_DOVI_RPU).map_or(false, |v| v > 0);
+        let cambi_score = map.get_float(KEY_CAMBI).ok();
 
         VSFrameProps {
             frame_type,
             color_range,
-            chromaloc,
+            chroma_location,
             primaries,
             matrix,
             transfer,
             is_scenecut,
+            is_dolbyvision,
+            cambi_score,
         }
     }
 }

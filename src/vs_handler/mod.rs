@@ -147,6 +147,22 @@ impl PreviewedScript {
         }
     }
 
+    pub fn get_original_props(&mut self, output: i32, frame_no: u32) -> Option<VSFrameProps> {
+        let env = self.env.get_or_insert(Environment::new().unwrap());
+
+        match env.get_output(output) {
+            Ok((node, _alpha)) => {
+                let frame = node.get_frame(frame_no as usize).unwrap();
+
+                Some(VSFrameProps::from_mapref(frame.props()))
+            }
+            Err(e) => {
+                println!("{:?}", e);
+                None
+            }
+        }
+    }
+
     pub fn is_initialized(&self) -> bool {
         self.env.is_some()
     }

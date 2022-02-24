@@ -122,7 +122,7 @@ impl epi::App for Previewer {
                 }
 
                 if self.state.show_gui {
-                    self.draw_state_window(ctx);
+                    self.draw_state_window(ctx, frame);
                 }
 
                 self.draw_centered_image(ctx, frame, ui);
@@ -142,22 +142,32 @@ impl epi::App for Previewer {
 }
 
 impl Previewer {
-    fn draw_state_window(&mut self, ctx: &egui::Context) {
+    fn draw_state_window(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
         let has_current_output =
             !self.outputs.is_empty() && self.outputs.contains_key(&self.state.cur_output);
 
         egui::Window::new("State")
-            .resizable(false)
+            .resizable(true)
             .collapsible(false)
             .show(ctx, |ui| {
-                self.output_select_ui(ui);
-                self.zoom_slider_ui(ui);
-                self.translate_drag_ui(ui);
+                egui::Grid::new("node_grid")
+                    .num_columns(2)
+                    .spacing([8.0, 4.0])
+                    .show(ui, |ui| {
+                        self.output_select_ui(ui);
+                        ui.end_row();
+
+                        self.zoom_slider_ui(ui);
+                        ui.end_row();
+
+                        self.translate_drag_ui(ui);
+                        ui.end_row();
+                    });
 
                 if has_current_output {
                     ui.separator();
 
-                    self.frameprops_ui(ui);
+                    self.frameprops_ui(frame, ui);
                 }
             });
     }
@@ -289,21 +299,24 @@ impl Previewer {
         let old_output = self.state.cur_output;
         let mut new_output = old_output;
 
-        ui.horizontal(|ui| {
-            ui.label(RichText::new("Output").color(STATE_LABEL_COLOR));
+        ui.label(RichText::new("Output").color(STATE_LABEL_COLOR));
 
-            egui::ComboBox::from_id_source(egui::Id::new("output_select"))
-                .selected_text(format!("Output {}", new_output))
-                .show_ui(ui, |ui| {
-                    for i in self.outputs.keys().sorted() {
-                        ui.selectable_value(&mut new_output, *i, format!("Output {}", i));
-                    }
-                });
-        });
+        egui::ComboBox::from_id_source(egui::Id::new("output_select"))
+            .selected_text(format!("Output {}", new_output))
+            .show_ui(ui, |ui| {
+                for i in self.outputs.keys().sorted() {
+                    ui.selectable_value(&mut new_output, *i, format!("Output {}", i));
+                }
+            });
 
         // Changed output
         if new_output != old_output {
             self.state.cur_output = new_output;
+
+            {
+                let out = self.outputs.get_mut(&old_output).unwrap();
+                out.original_props_promise = None;
+            }
 
             if self.output_needs_rerender(old_output) {
                 self.rerender = true;
@@ -315,13 +328,11 @@ impl Previewer {
         let old_zoom = self.state.zoom_factor;
         let mut new_zoom = old_zoom;
 
-        ui.horizontal(|ui| {
-            let zoom_range = MIN_ZOOM..=MAX_ZOOM;
-            let frames_slider = egui::Slider::new(&mut new_zoom, zoom_range).max_decimals(3);
+        let zoom_range = MIN_ZOOM..=MAX_ZOOM;
+        let frames_slider = egui::Slider::new(&mut new_zoom, zoom_range).max_decimals(3);
 
-            ui.label(RichText::new("Zoom factor").color(STATE_LABEL_COLOR));
-            ui.add(frames_slider);
-        });
+        ui.label(RichText::new("Zoom factor").color(STATE_LABEL_COLOR));
+        ui.add(frames_slider);
 
         if new_zoom != old_zoom {
             self.state.zoom_factor = new_zoom;
@@ -335,9 +346,8 @@ impl Previewer {
         let old_translate = self.state.translate_norm;
         let mut new_translate = old_translate;
 
+        ui.label(RichText::new("Translate").color(STATE_LABEL_COLOR));
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Translate").color(STATE_LABEL_COLOR));
-
             let x_drag = DragValue::new(&mut new_translate.x)
                 .speed(0.01)
                 .clamp_range(-0.01..=1.0)
@@ -362,7 +372,7 @@ impl Previewer {
         }
     }
 
-    pub fn frameprops_ui(&mut self, ui: &mut egui::Ui) {
+    pub fn frameprops_ui(&mut self, frame: &epi::Frame, ui: &mut egui::Ui) {
         let output = self.outputs.get(&self.state.cur_output).unwrap();
         let mut props = None;
 
@@ -374,13 +384,79 @@ impl Previewer {
             }
         }
 
+        // Overwrite from original if available
+        if let Some(promise) = &output.original_props_promise {
+            if let Some(Some(p)) = promise.ready() {
+                props = Some(p.clone());
+            }
+        }
+
         if let Some(props) = props {
             let header = RichText::new("Frame props").color(STATE_LABEL_COLOR);
 
-            ui.collapsing(header, |ui| {
-                ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                });
+            egui::CollapsingHeader::new(header).show(ui, |ui| {
+                ui.spacing_mut().item_spacing.y = 0.0;
+
+                egui::Grid::new("props_grid")
+                    .num_columns(2)
+                    .spacing([8.0, -2.0])
+                    .show(ui, |ui| {
+                        ui.label(RichText::new("Frame type").color(STATE_LABEL_COLOR));
+                        ui.label(props.frame_type);
+                        ui.end_row();
+
+                        ui.label(RichText::new("Color range").color(STATE_LABEL_COLOR));
+                        ui.label(props.color_range.to_string());
+                        ui.end_row();
+
+                        if let Some(chromaloc) = props.chroma_location {
+                            ui.label(RichText::new("Chroma location").color(STATE_LABEL_COLOR));
+                            ui.label(chromaloc.to_string());
+                            ui.end_row();
+                        }
+
+                        ui.label(RichText::new("Primaries").color(STATE_LABEL_COLOR));
+                        ui.label(props.primaries.to_string());
+                        ui.end_row();
+
+                        ui.label(RichText::new("Matrix").color(STATE_LABEL_COLOR));
+                        ui.label(props.matrix.to_string());
+                        ui.end_row();
+
+                        ui.label(RichText::new("Transfer").color(STATE_LABEL_COLOR));
+                        ui.label(props.transfer.to_string());
+                        ui.end_row();
+
+                        let (v, color) = crate::utils::icon_color_for_bool(props.is_dolbyvision);
+                        ui.label(RichText::new("Dolby Vision").color(STATE_LABEL_COLOR));
+                        ui.label(RichText::new(v).size(20.0).color(color));
+                        ui.end_row();
+
+                        if let Some(sc) = props.is_scenecut {
+                            let (v, color) = crate::utils::icon_color_for_bool(sc);
+
+                            ui.label(RichText::new("Scene cut").color(STATE_LABEL_COLOR));
+                            ui.label(RichText::new(v).size(20.0).color(color));
+                            ui.end_row();
+                        }
+
+                        if let Some(cambi) = props.cambi_score {
+                            let rounded = egui::emath::round_to_decimals(cambi, 4);
+                            ui.label(RichText::new("CAMBI score").color(STATE_LABEL_COLOR));
+                            ui.label(rounded.to_string());
+                            ui.end_row();
+                        }
+
+                        ui.label("");
+                        ui.with_layout(egui::Layout::right_to_left(), |ui| {
+                            let reload_btn = ui.button("Reload original");
+
+                            if reload_btn.clicked() {
+                                self.fetch_original_props(frame);
+                            }
+                        });
+                        ui.end_row();
+                    });
             });
         }
     }

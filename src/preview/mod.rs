@@ -10,7 +10,7 @@ mod previewer_app;
 use preview_filter_type::PreviewFilterType;
 pub use previewer::Previewer;
 
-use super::vs_handler::{vstransform, PreviewedScript, VSFrame, VSOutput};
+use super::vs_handler::{vstransform, PreviewedScript, VSFrame, VSFrameProps, VSOutput};
 use vstransform::VSTransformOptions;
 
 use crate::utils::{
@@ -54,6 +54,7 @@ pub struct PreviewOutput {
     pub vsoutput: VSOutput,
 
     pub frame_promise: Option<FramePromise>,
+    pub original_props_promise: Option<Promise<Option<VSFrameProps>>>,
 
     pub force_reprocess: bool,
     pub last_frame_no: u32,

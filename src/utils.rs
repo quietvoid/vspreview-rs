@@ -139,10 +139,18 @@ pub fn translate_norm_to_pixels(
     win_size: &Vec2,
     zoom_factor: f32,
 ) -> Vec2 {
-    let coeffs = translate_norm_coeffs(&size, &win_size, zoom_factor);
+    let coeffs = translate_norm_coeffs(size, win_size, zoom_factor);
 
     Vec2::from([
         (translate_norm.x * coeffs.x).round(),
         (translate_norm.y * coeffs.y).round(),
     ])
+}
+
+pub const fn icon_color_for_bool(value: bool) -> (&'static str, Color32) {
+    if value {
+        ("✅", Color32::from_rgb(0, 128, 0))
+    } else {
+        ("✖", Color32::from_rgb(200, 0, 0))
+    }
 }

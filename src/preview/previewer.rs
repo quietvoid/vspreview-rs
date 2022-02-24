@@ -153,7 +153,7 @@ impl Previewer {
                 let outputs = mutex.get_outputs();
                 assert!(!outputs.is_empty());
 
-                let output = if !outputs.contains_key(&cur_output) {
+                let output_no = if !outputs.contains_key(&cur_output) {
                     // Fallback to first output in order
                     let mut keys: Vec<&i32> = outputs.keys().collect();
                     keys.sort();
@@ -163,8 +163,16 @@ impl Previewer {
                     cur_output
                 };
 
+                // Adjust frame number to max of node
+                let cur_frame_no = if let Some(output) = outputs.get(&output_no) {
+                    let max_frame = output.node_info.num_frames - 1;
+                    cur_frame_no.min(max_frame)
+                } else {
+                    cur_frame_no
+                };
+
                 let vsframe = mutex
-                    .get_frame(output, cur_frame_no, &state.frame_transform_opts)
+                    .get_frame(output_no, cur_frame_no, &state.frame_transform_opts)
                     .unwrap();
 
                 // Return unprocess while we don't have a proper window size
@@ -241,6 +249,11 @@ impl Previewer {
     pub fn check_rerender(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
         if !self.outputs.is_empty() {
             let output = self.outputs.get_mut(&self.state.cur_output).unwrap();
+
+            if self.rerender && self.replace_frame_promise.is_none() {
+                // Remove original frame props
+                output.original_props_promise = None;
+            }
 
             if output.force_reprocess {
                 self.rerender = true;
@@ -629,6 +642,7 @@ impl Previewer {
         self.state.translate_norm.y = self.state.translate.y / coeffs.y;
     }
 
+    // Only called when the output changes
     // Update zoom/translate for the new output
     // Returns if we need to rerender
     pub fn output_needs_rerender(&mut self, old_output: i32) -> bool {
@@ -695,5 +709,29 @@ impl Previewer {
         self.outputs
             .values_mut()
             .for_each(|o| o.force_reprocess = true);
+    }
+
+    // Can only be called when an output is selected
+    pub fn fetch_original_props(&mut self, frame: &epi::Frame) {
+        let cur_output = self.state.cur_output;
+        let cur_frame_no = self.state.cur_frame_no;
+
+        let frame = frame.clone();
+
+        let script = self.script.clone();
+
+        let promise = poll_promise::Promise::spawn_thread("fetch_original_props", move || {
+            if let Ok(mut mutex) = script.try_lock() {
+                let props = mutex.get_original_props(cur_output, cur_frame_no);
+                frame.request_repaint();
+
+                props
+            } else {
+                None
+            }
+        });
+
+        let output = self.outputs.get_mut(&cur_output).unwrap();
+        output.original_props_promise = Some(promise);
     }
 }
