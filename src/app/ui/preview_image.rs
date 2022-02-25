@@ -42,7 +42,10 @@ impl UiPreviewImage {
                     let mut image_size: Option<[f32; 2]> = None;
 
                     if let Ok(pf) = &pf.read() {
-                        image_size = Some(pf.vsframe.frame_image.size.map(|i| i as f32));
+                        image_size = Some([
+                            pf.vsframe.frame_image.width() as f32,
+                            pf.vsframe.frame_image.height() as f32,
+                        ]);
 
                         let tex_size = pf.texture.size_vec2();
                         ui.image(&pf.texture, tex_size);

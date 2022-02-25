@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use eframe::epaint::ColorImage;
+use image::DynamicImage;
 use vapoursynth::map::MapRef;
 
 use super::zimg_map::*;
@@ -30,13 +30,13 @@ const KEY_HDR10_MAXFALL: &str = "ContentLightLevelAverage";
 
 #[derive(Default, Clone)]
 pub struct VSFrame {
-    pub frame_image: ColorImage,
+    pub frame_image: DynamicImage,
     pub props: VSFrameProps,
 }
 
-#[derive(Default, Debug, Clone, PartialEq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct VSFrameProps {
-    pub frame_type: String,
+    pub frame_type: char,
 
     pub color_range: VSColorRange,
     pub chroma_location: VSChromaLocation,
@@ -74,9 +74,9 @@ impl VSFrameProps {
     // Only reserved frame props
     pub fn from_mapref(map: MapRef) -> Self {
         let frame_type = if let Ok(frame_type) = map.get_data(KEY_FRAME_TYPE) {
-            std::str::from_utf8(frame_type).unwrap().to_string()
+            frame_type[0] as char
         } else {
-            "N/A".to_string()
+            '?'
         };
 
         let color_range = map

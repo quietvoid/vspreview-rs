@@ -13,7 +13,7 @@ pub enum PreviewFilterType {
 /// Filter type to use with fast_image_resize
 impl Default for PreviewFilterType {
     fn default() -> Self {
-        PreviewFilterType::Bilinear
+        PreviewFilterType::Point
     }
 }
 

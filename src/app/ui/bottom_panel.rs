@@ -20,8 +20,7 @@ impl UiBottomPanel {
             .frame(transparent_frame)
             .show(ctx, |ui| {
                 // Add slider
-                ui.spacing_mut().slider_width =
-                    (pv.available_size.x + (pv.state.canvas_margin * 2.0)) / 2.0;
+                ui.spacing_mut().slider_width = 600.0;
 
                 let mut slider_frame_no = pv.state.cur_frame_no;
 
@@ -43,7 +42,6 @@ impl UiBottomPanel {
                 // Released/changed value
                 if lost_focus {
                     output.last_frame_no = pv.state.cur_frame_no;
-
                     pv.state.cur_frame_no = slider_frame_no;
 
                     pv.rerender = true;

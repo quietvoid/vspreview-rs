@@ -10,7 +10,7 @@ impl UiFrameProps {
         if let Some(promise) = &output.frame_promise {
             if let Some(pf) = promise.ready() {
                 if let Ok(pf) = &pf.read() {
-                    props = Some(pf.vsframe.props.clone())
+                    props = Some(pf.vsframe.props)
                 }
             }
         }
@@ -18,7 +18,7 @@ impl UiFrameProps {
         // Overwrite from original if available
         if let Some(promise) = &output.original_props_promise {
             if let Some(Some(p)) = promise.ready() {
-                props = Some(p.clone());
+                props = Some(*p);
             }
         }
 
@@ -33,7 +33,7 @@ impl UiFrameProps {
                     .spacing([8.0, -2.0])
                     .show(ui, |ui| {
                         ui.label(RichText::new("Frame type").color(STATE_LABEL_COLOR));
-                        ui.label(props.frame_type);
+                        ui.label(props.frame_type.to_string());
                         ui.end_row();
 
                         ui.label(RichText::new("Color range").color(STATE_LABEL_COLOR));

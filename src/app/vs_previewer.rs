@@ -1,8 +1,11 @@
 use eframe::epaint::ColorImage;
 use eframe::{egui, epi};
 use fast_image_resize as fir;
+use image::DynamicImage;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+
+use crate::utils::image_to_colorimage;
 
 use super::*;
 
@@ -28,19 +31,37 @@ pub struct VSPreviewer {
 
 impl VSPreviewer {
     pub fn process_image(
-        orig: &ColorImage,
+        orig: &DynamicImage,
         state: &PreviewState,
         win_size: &eframe::epaint::Vec2,
     ) -> ColorImage {
-        let src_size = Vec2::from([orig.size[0] as f32, orig.size[1] as f32]);
-        let (src_w, src_h) = (src_size.x, src_size.y);
-
-        let mut img = image_from_colorimage(orig);
-
-        let zoom_factor = state.zoom_factor;
-
         // Rounded up
         let win_size = win_size.round();
+
+        let needs_processing = if state.zoom_factor != 1.0
+            || state.translate_norm.length() > 0.0
+            || state.upscale_to_window
+        {
+            let orig_size = Vec2::new(orig.width() as f32, orig.height() as f32);
+
+            // Scaled size to window bounds
+            let target_size = dimensions_for_window(win_size, orig_size).round();
+
+            orig_size != target_size
+        } else {
+            false
+        };
+
+        if !needs_processing {
+            return image_to_colorimage(orig);
+        }
+
+        let src_size = Vec2::from([orig.width() as f32, orig.height() as f32]);
+        let (src_w, src_h) = (src_size.x, src_size.y);
+
+        let mut img = orig.clone();
+
+        let zoom_factor = state.zoom_factor;
         let (mut w, mut h) = (src_w as f32, src_h as f32);
 
         // Unzoom first and foremost
@@ -125,14 +146,11 @@ impl VSPreviewer {
             }
         }
 
-        let new_size = [img.width() as usize, img.height() as usize];
-        let processed = ColorImage::from_rgba_unmultiplied(new_size, img.as_bytes());
-
-        processed
+        image_to_colorimage(&img)
     }
 
     pub fn reload(&mut self, ctx: egui::Context, frame: epi::Frame, force_reload: bool) {
-        let state = self.state.clone();
+        let state = self.state;
         let cur_output = state.cur_output;
         let cur_frame_no = state.cur_frame_no;
 
@@ -178,7 +196,7 @@ impl VSPreviewer {
                 let processed_image = if win_size.min_elem() > 0.0 {
                     VSPreviewer::process_image(&vsframe.frame_image, &state, &win_size)
                 } else {
-                    vsframe.frame_image.clone()
+                    image_to_colorimage(&vsframe.frame_image)
                 };
 
                 let pf = PreviewFrame {
@@ -279,7 +297,7 @@ impl VSPreviewer {
                 None
             };
 
-            let state = self.state.clone();
+            let state = self.state;
 
             let ctx = ctx.clone();
             let frame = frame.clone();
@@ -373,8 +391,9 @@ impl VSPreviewer {
             if let Some(promise) = &output.frame_promise {
                 if let Some(pf) = promise.ready() {
                     if let Ok(pf) = &pf.read() {
-                        let img = crate::utils::image_from_colorimage(&pf.vsframe.frame_image);
-                        img.save_with_format(&save_path, image::ImageFormat::Png)
+                        pf.vsframe
+                            .frame_image
+                            .save_with_format(&save_path, image::ImageFormat::Png)
                             .unwrap();
                     } else {
                         println!("Apparently the frame is being written to");
@@ -437,7 +456,11 @@ impl VSPreviewer {
         let new_node = &new.vsoutput.node_info;
         let new_size = Vec2::from([new_node.width as f32, new_node.height as f32]);
 
-        if self.state.zoom_factor > 1.0 && self.state.translate_norm.length() > 0.0 {
+        // Only adjust the zoom if we're not scaling up
+        if !self.state.upscale_to_window
+            && self.state.zoom_factor > 1.0
+            && self.state.translate_norm.length() > 0.0
+        {
             if old_size.length() > new_size.length() {
                 self.state.zoom_factor += 1.5;
             } else if old_size.length() < new_size.length() {

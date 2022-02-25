@@ -39,7 +39,7 @@ Original frame props require an extra frame request, so they can be obtained on 
     - Useful when the clip is lower resolution than the window.
 - **Zoom multiplier**: Multiplies the zoom factor by this value instead of incrementing by 1.0.
 - **Scroll multiplier**: Mutliplies the pixels translated on wheel scroll.
-    - Can be used to translate faster.
+    - Can be used to translate faster or slower.
 - **Canvas margin**: Padding to add around the image.
 
 &nbsp;

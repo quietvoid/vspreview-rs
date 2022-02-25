@@ -17,8 +17,7 @@ use super::vs_handler::{vstransform, PreviewedScript, VSFrame, VSFrameProps, VSO
 use vstransform::VSTransformOptions;
 
 use crate::utils::{
-    dimensions_for_window, image_from_colorimage, resize_fast, translate_norm_coeffs,
-    update_input_key_state,
+    dimensions_for_window, resize_fast, translate_norm_coeffs, update_input_key_state,
 };
 
 pub const MIN_ZOOM: f32 = 0.125;
@@ -27,7 +26,10 @@ pub const MAX_ZOOM: f32 = 64.0;
 type APreviewFrame = Arc<RwLock<PreviewFrame>>;
 type FramePromise = Promise<APreviewFrame>;
 
-#[derive(Default, Clone, serde::Deserialize, serde::Serialize)]
+/// TODO:
+///   - Canvas background color
+///   - ?
+#[derive(Default, Clone, Copy, serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct PreviewState {
     pub show_gui: bool,
@@ -44,7 +46,7 @@ pub struct PreviewState {
 
     // Only upscales
     pub upscale_to_window: bool,
-    /// Defaults to Bilinear
+    /// Defaults to Point for performance
     pub upsampling_filter: PreviewFilterType,
 
     pub zoom_multiplier: f32,

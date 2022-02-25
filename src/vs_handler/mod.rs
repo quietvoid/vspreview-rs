@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use vapoursynth::prelude::*;
 
-use crate::utils::frame_to_colorimage;
+use crate::utils::frame_to_dynimage;
 
 pub mod vsframe;
 pub mod vsnode;
@@ -75,7 +75,7 @@ impl PreviewedScript {
         frame_no: u32,
         opts: &VSTransformOptions,
     ) -> Option<VSFrame> {
-        let env = self.env.get_or_insert(Environment::new().unwrap());
+        let env = self.env.as_ref().unwrap();
 
         match env.get_output(output) {
             Ok((mut node, _alpha)) => {
@@ -136,7 +136,7 @@ impl PreviewedScript {
 
                 let frame = node.get_frame(frame_no as usize).unwrap();
                 let props = VSFrameProps::from_mapref(frame.props());
-                let frame_image = frame_to_colorimage(&frame);
+                let frame_image = frame_to_dynimage(&frame);
 
                 Some(VSFrame { frame_image, props })
             }
@@ -148,7 +148,7 @@ impl PreviewedScript {
     }
 
     pub fn get_original_props(&mut self, output: i32, frame_no: u32) -> Option<VSFrameProps> {
-        let env = self.env.get_or_insert(Environment::new().unwrap());
+        let env = self.env.as_ref().unwrap();
 
         match env.get_output(output) {
             Ok((node, _alpha)) => {

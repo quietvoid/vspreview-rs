@@ -3,12 +3,13 @@ use std::{collections::HashMap, num::NonZeroU32};
 use eframe::epaint::{Color32, ColorImage, Vec2};
 
 use fast_image_resize as fr;
-use image::DynamicImage;
-use itertools::izip;
+use image::{DynamicImage, ImageBuffer};
 use vapoursynth::prelude::{ColorFamily, FrameRef};
 
-/// ColorImage from 24 bits RGB
-pub fn frame_to_colorimage(frame: &FrameRef) -> ColorImage {
+/// `DynamicImage` from `VS::FrameRef`
+///    `ColorFamily::Gray` => `DynamicImage::ImageLuma8`
+///    `ColorFamily::RGB` => `DynamicImage::ImageRgb8`
+pub fn frame_to_dynimage(frame: &FrameRef) -> DynamicImage {
     let format = frame.format();
 
     // Gray or RGB
@@ -23,25 +24,31 @@ pub fn frame_to_colorimage(frame: &FrameRef) -> ColorImage {
     // Assumes all planes are the same resolution
     let (w, h) = (frame.width(0), frame.height(0));
 
-    let pixels = if plane_count == 1 {
-        let gray: &[u8] = frame.plane(0).unwrap();
+    if plane_count == 1 {
+        let mut buf = ImageBuffer::new(w as u32, h as u32);
 
-        gray.iter().map(|p| Color32::from_gray(*p)).collect()
+        buf.enumerate_rows_mut().for_each(|(i, pixels)| {
+            let y = frame.plane_row(0, i as usize);
+            pixels.for_each(|(x, _, p)| *p = image::Luma([y[x as usize]]));
+        });
+
+        DynamicImage::ImageLuma8(buf)
     } else {
-        let (r, g, b): (&[u8], &[u8], &[u8]) = (
-            frame.plane(0).unwrap(),
-            frame.plane(1).unwrap(),
-            frame.plane(2).unwrap(),
-        );
+        let mut buf = ImageBuffer::new(w as u32, h as u32);
 
-        izip!(r, g, b)
-            .map(|(r, g, b)| Color32::from_rgb(*r, *g, *b))
-            .collect()
-    };
+        buf.enumerate_rows_mut().for_each(|(i, pixels)| {
+            let row = i as usize;
+            let r = frame.plane_row(0, row);
+            let g = frame.plane_row(1, row);
+            let b = frame.plane_row(2, row);
 
-    ColorImage {
-        size: [w, h],
-        pixels,
+            pixels.for_each(|(x, _, p)| {
+                let x = x as usize;
+                *p = image::Rgb([r[x], g[x], b[x]])
+            });
+        });
+
+        DynamicImage::ImageRgb8(buf)
     }
 }
 
@@ -55,13 +62,15 @@ pub fn resize_fast(
     let width = NonZeroU32::new(img.width()).unwrap();
     let height = NonZeroU32::new(img.height()).unwrap();
 
-    let src_image = fr::Image::from_vec_u8(
-        width,
-        height,
-        img.to_rgba8().into_raw(),
-        fr::PixelType::U8x4,
-    )
-    .unwrap();
+    let src_image = match img {
+        DynamicImage::ImageLuma8(luma) => {
+            fr::Image::from_vec_u8(width, height, luma.into_raw(), fr::PixelType::U8).unwrap()
+        }
+        DynamicImage::ImageRgb8(rgb) => {
+            fr::Image::from_vec_u8(width, height, rgb.into_raw(), fr::PixelType::U8x3).unwrap()
+        }
+        _ => unreachable!(),
+    };
 
     let mut dst_image = fr::Image::new(
         NonZeroU32::new(dst_width).unwrap(),
@@ -73,10 +82,17 @@ pub fn resize_fast(
     let mut resizer = fr::Resizer::new(fr::ResizeAlg::Convolution(filter_type));
     resizer.resize(&src_image.view(), &mut dst_view).unwrap();
 
-    let buf =
-        image::ImageBuffer::from_raw(dst_width, dst_height, dst_image.buffer().to_vec()).unwrap();
-
-    DynamicImage::ImageRgba8(buf)
+    match dst_image.pixel_type() {
+        fr::PixelType::U8 => DynamicImage::ImageLuma8(
+            image::ImageBuffer::from_raw(dst_width, dst_height, dst_image.buffer().to_vec())
+                .unwrap(),
+        ),
+        fr::PixelType::U8x3 => DynamicImage::ImageRgb8(
+            image::ImageBuffer::from_raw(dst_width, dst_height, dst_image.buffer().to_vec())
+                .unwrap(),
+        ),
+        _ => unreachable!(),
+    }
 }
 
 pub fn dimensions_for_window(win_size: Vec2, orig_size: Vec2) -> Vec2 {
@@ -97,14 +113,20 @@ pub fn dimensions_for_window(win_size: Vec2, orig_size: Vec2) -> Vec2 {
     size
 }
 
-pub fn image_from_colorimage(ci: &ColorImage) -> DynamicImage {
-    let (src_w, src_h) = (ci.size[0] as f32, ci.size[1] as f32);
+pub fn image_to_colorimage(img: &DynamicImage) -> ColorImage {
+    let size = [img.width() as usize, img.height() as usize];
 
-    DynamicImage::ImageRgba8(image::ImageBuffer::from_fn(
-        src_w as u32,
-        src_h as u32,
-        |x, y| image::Rgba(ci[(x as usize, y as usize)].to_array()),
-    ))
+    let pixels = match img {
+        DynamicImage::ImageLuma8(luma) => luma.iter().copied().map(Color32::from_gray).collect(),
+        DynamicImage::ImageRgb8(rgb) => rgb
+            .as_raw()
+            .chunks_exact(3)
+            .map(|p| Color32::from_rgb(p[0], p[1], p[2]))
+            .collect(),
+        _ => unreachable!(),
+    };
+
+    ColorImage { size, pixels }
 }
 
 // Normalize from max translate value to float with range [-1, 1]
