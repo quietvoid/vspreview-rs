@@ -77,10 +77,6 @@ impl UiPreviewImage {
             pv.save_screenshot();
         }
 
-        if ui.input().modifiers.shift && ui.input().key_pressed(Key::C) {
-            ui.output().copied_text = pv.state.cur_frame_no.to_string();
-        }
-
         pv.rerender = rerender;
 
         if ui.input().key_pressed(Key::R) {

@@ -89,6 +89,11 @@ impl epi::App for VSPreviewer {
                         if !self.state.show_gui {
                             self.inputs_focused.clear();
                         }
+                    } else if ui.input().modifiers.ctrl
+                        && ui.input().modifiers.shift
+                        && ui.input().key_pressed(Key::C)
+                    {
+                        ui.output().copied_text = self.state.cur_frame_no.to_string();
                     }
                 }
 

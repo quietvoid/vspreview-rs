@@ -72,18 +72,16 @@ impl UiFrameProps {
                                     .sense(egui::Sense::click());
                             let mdcv_res = ui.add(prim_label);
 
-                            ui.scope(|ui| {
-                                if mdcv_res
-                                    .on_hover_text("Click to copy x265 setting")
-                                    .clicked()
-                                {
-                                    let arg = format!(
-                                        "--master-display \"{}\"",
-                                        hdr10_meta.mastering_display.x265_string()
-                                    );
-                                    ui.output().copied_text = arg;
-                                }
-                            });
+                            if mdcv_res
+                                .on_hover_text("Click to copy x265 setting")
+                                .clicked()
+                            {
+                                let arg = format!(
+                                    "--master-display \"{}\"",
+                                    hdr10_meta.mastering_display.x265_string()
+                                );
+                                ui.output().copied_text = arg;
+                            }
                             ui.end_row();
 
                             if let (Some(maxcll), Some(maxfall)) =
@@ -99,15 +97,13 @@ impl UiFrameProps {
                                 .sense(egui::Sense::click());
                                 let cll_res = ui.add(cll_label);
 
-                                ui.scope(|ui| {
-                                    if cll_res
-                                        .on_hover_text("Click to copy x265 setting")
-                                        .clicked()
-                                    {
-                                        let arg = format!("--max-cll \"{},{}\"", maxcll, maxfall);
-                                        ui.output().copied_text = arg;
-                                    }
-                                });
+                                if cll_res
+                                    .on_hover_text("Click to copy x265 setting")
+                                    .clicked()
+                                {
+                                    let arg = format!("--max-cll \"{},{}\"", maxcll, maxfall);
+                                    ui.output().copied_text = arg;
+                                }
                                 ui.end_row();
                             }
                         }
