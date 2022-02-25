@@ -1,9 +1,12 @@
-The UI has two parts (currently).
+The UI has two parts (currently).  
+Both can be displayed by toggling with the `I` key.
 
-The state window  
+**The state window**  
+
 ![State window](/assets/01gui.jpg?raw=true "State window")
 
-A bottom panel  
+**A bottom panel**  
+
 ![Bottom panel](/assets/02clipinfo.jpg?raw=true "Bottom panel")
 
 The frame props default to the converted RGB24 clip for display.  
