@@ -1,6 +1,6 @@
 use fast_image_resize as fir;
 
-#[derive(Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum PreviewFilterType {
     Point,
     Bilinear,
@@ -13,7 +13,7 @@ pub enum PreviewFilterType {
 /// Filter type to use with fast_image_resize
 impl Default for PreviewFilterType {
     fn default() -> Self {
-        PreviewFilterType::Point
+        PreviewFilterType::Bilinear
     }
 }
 

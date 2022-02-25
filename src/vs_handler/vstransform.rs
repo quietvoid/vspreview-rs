@@ -1,11 +1,13 @@
-#[derive(Default, Clone, Debug, serde::Deserialize, serde::Serialize)]
+use std::fmt::Display;
+
+#[derive(Default, Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct VSTransformOptions {
     pub resizer: VSResizer,
-    pub add_dither: bool,
+    pub enable_dithering: bool,
     pub dither_algo: VSDitherAlgo,
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum VSResizer {
     Bilinear,
     Bicubic,
@@ -16,7 +18,7 @@ pub enum VSResizer {
     Spline64,
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum VSDitherAlgo {
     None,
     Ordered,
@@ -32,30 +34,50 @@ impl Default for VSResizer {
 
 impl Default for VSDitherAlgo {
     fn default() -> Self {
-        VSDitherAlgo::None
+        Self::None
     }
 }
 
 impl VSResizer {
     pub const fn as_str(&self) -> &str {
         match self {
-            VSResizer::Bilinear => "Bilinear",
-            VSResizer::Bicubic => "Bicubic",
-            VSResizer::Point => "Point",
-            VSResizer::Lanczos => "Lanczos",
-            VSResizer::Spline16 => "Spline16",
-            VSResizer::Spline36 => "Spline36",
-            VSResizer::Spline64 => "Spline64",
+            Self::Bilinear => "Bilinear",
+            Self::Bicubic => "Bicubic",
+            Self::Point => "Point",
+            Self::Lanczos => "Lanczos",
+            Self::Spline16 => "Spline16",
+            Self::Spline36 => "Spline36",
+            Self::Spline64 => "Spline64",
         }
     }
 }
+
 impl VSDitherAlgo {
     pub const fn as_str(&self) -> &str {
         match self {
-            VSDitherAlgo::None => "none",
-            VSDitherAlgo::Ordered => "ordered",
-            VSDitherAlgo::Random => "random",
-            VSDitherAlgo::ErrorDiffusion => "error_diffusion",
+            Self::None => "none",
+            Self::Ordered => "ordered",
+            Self::Random => "random",
+            Self::ErrorDiffusion => "error_diffusion",
         }
+    }
+}
+
+impl Display for VSResizer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl Display for VSDitherAlgo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let v = match self {
+            Self::None => "None",
+            Self::Ordered => "Ordered",
+            Self::Random => "Random",
+            Self::ErrorDiffusion => "Error Diffusion",
+        };
+
+        f.write_str(v)
     }
 }

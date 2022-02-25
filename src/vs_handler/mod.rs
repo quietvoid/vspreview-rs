@@ -95,7 +95,7 @@ impl PreviewedScript {
 
                     // Disable dither for RGB24 src
                     // Always dither for GRAY/YUV src
-                    if opts.add_dither && !is_rgb24 && f.bitsPerSample >= 8 {
+                    if opts.enable_dithering && !is_rgb24 && f.bitsPerSample >= 8 {
                         args.set_data("dither_type", opts.dither_algo.as_str().as_bytes())
                             .unwrap();
                     }

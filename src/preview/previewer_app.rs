@@ -9,7 +9,7 @@ use eframe::{
 use itertools::Itertools;
 
 use super::*;
-use vstransform::VSDitherAlgo;
+use vstransform::{VSDitherAlgo, VSResizer};
 
 const STATE_LABEL_COLOR: Color32 = Color32::from_gray(160);
 
@@ -26,28 +26,16 @@ impl epi::App for Previewer {
     ) {
         if let Some(storage) = _storage {
             self.state = epi::get_value(storage, epi::APP_KEY).unwrap_or(PreviewState {
-                upscale_to_window: false,
                 zoom_factor: 1.0,
                 zoom_multiplier: 1.0,
                 scroll_multiplier: 1.0,
-                canvas_margin: 0.0,
-                upsample_filter: PreviewFilterType::Bilinear,
+                canvas_margin: 2.0,
                 ..Default::default()
             })
         }
 
-        self.state.cur_frame_no = 12345;
-        self.state.upscale_to_window = false;
-        self.state.zoom_factor = 1.0;
-        self.state.zoom_multiplier = 1.0;
-        self.state.translate = Vec2::ZERO;
-        self.state.translate_norm = Vec2::ZERO;
         self.state.scroll_multiplier = 1.0;
         self.state.canvas_margin = 0.0;
-        self.state.upsample_filter = PreviewFilterType::Bilinear;
-
-        self.state.frame_transform_opts.add_dither = false;
-        self.state.frame_transform_opts.dither_algo = VSDitherAlgo::None;
 
         if self.state.scroll_multiplier <= 0.0 {
             self.state.scroll_multiplier = 1.0;
@@ -169,6 +157,8 @@ impl Previewer {
 
                     self.frameprops_ui(frame, ui);
                 }
+
+                self.preferences_ui(ui);
             });
     }
 
@@ -507,5 +497,95 @@ impl Previewer {
                     });
             });
         }
+    }
+
+    pub fn preferences_ui(&mut self, ui: &mut egui::Ui) {
+        let header = RichText::new("Preferences").color(STATE_LABEL_COLOR);
+
+        egui::CollapsingHeader::new(header).show(ui, |ui| {
+            let ft = &mut self.state.frame_transform_opts;
+            let vs_resizer = &mut ft.resizer;
+            let enable_dithering = &mut ft.enable_dithering;
+            let dither_algo = &mut ft.dither_algo;
+
+            egui::Grid::new("prefs_grid")
+                .num_columns(2)
+                .spacing([8.0, 4.0])
+                .show(ui, |ui| {
+                    ui.label(RichText::new("Resizer (chroma)").color(STATE_LABEL_COLOR));
+                    egui::ComboBox::from_id_source(egui::Id::new("vs_resizer_select"))
+                        .selected_text(vs_resizer.to_string())
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(vs_resizer, VSResizer::Bilinear, "Bilinear");
+                            ui.selectable_value(vs_resizer, VSResizer::Bicubic, "Bicubic");
+                            ui.selectable_value(vs_resizer, VSResizer::Point, "Point");
+                            ui.selectable_value(vs_resizer, VSResizer::Lanczos, "Lanczos");
+                            ui.selectable_value(vs_resizer, VSResizer::Spline16, "Spline16");
+                            ui.selectable_value(vs_resizer, VSResizer::Spline36, "Spline36");
+                            ui.selectable_value(vs_resizer, VSResizer::Spline64, "Spline64");
+                        });
+                    ui.end_row();
+
+                    ui.checkbox(enable_dithering, "Enable dithering");
+                    if *enable_dithering {
+                        egui::ComboBox::from_id_source(egui::Id::new("vs_dither_algo_select"))
+                            .selected_text(dither_algo.to_string())
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(dither_algo, VSDitherAlgo::None, "None");
+                                ui.selectable_value(dither_algo, VSDitherAlgo::Ordered, "Ordered");
+                                ui.selectable_value(dither_algo, VSDitherAlgo::Random, "Random");
+                                ui.selectable_value(
+                                    dither_algo,
+                                    VSDitherAlgo::ErrorDiffusion,
+                                    "Error Diffusion",
+                                );
+                            });
+                    }
+                    ui.end_row();
+
+                    ui.checkbox(&mut self.state.upscale_to_window, "Upscale image to window");
+                    ui.end_row();
+
+                    if self.state.upscale_to_window {
+                        let upsample_filter = &mut self.state.upsample_filter;
+
+                        ui.label(RichText::new("Upsample filter").color(STATE_LABEL_COLOR));
+                        egui::ComboBox::from_id_source(egui::Id::new("upsample_filter_select"))
+                            .selected_text(format!("{:?}", upsample_filter))
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(
+                                    upsample_filter,
+                                    PreviewFilterType::Point,
+                                    "Point",
+                                );
+                                ui.selectable_value(
+                                    upsample_filter,
+                                    PreviewFilterType::Bilinear,
+                                    "Bilinear",
+                                );
+                                ui.selectable_value(
+                                    upsample_filter,
+                                    PreviewFilterType::Hamming,
+                                    "Hamming",
+                                );
+                                ui.selectable_value(
+                                    upsample_filter,
+                                    PreviewFilterType::CatmullRom,
+                                    "CatmullRom",
+                                );
+                                ui.selectable_value(
+                                    upsample_filter,
+                                    PreviewFilterType::Mitchell,
+                                    "Mitchell",
+                                );
+                                ui.selectable_value(
+                                    upsample_filter,
+                                    PreviewFilterType::Lanczos3,
+                                    "Lanczos3",
+                                );
+                            });
+                    }
+                });
+        });
     }
 }
