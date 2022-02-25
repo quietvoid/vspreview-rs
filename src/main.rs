@@ -6,11 +6,11 @@ use std::sync::{Arc, Mutex};
 
 use clap::Parser;
 
-mod preview;
+mod app;
 mod utils;
 mod vs_handler;
 
-use preview::Previewer;
+use app::VSPreviewer;
 use vs_handler::PreviewedScript;
 
 #[derive(Parser, Debug)]
@@ -24,7 +24,7 @@ fn main() {
     let options = eframe::NativeOptions::default();
     let opt = Opt::parse();
 
-    let previewer = Previewer {
+    let previewer = VSPreviewer {
         script: Arc::new(Mutex::new(PreviewedScript::new(opt.input))),
         ..Default::default()
     };

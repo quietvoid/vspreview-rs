@@ -1,4 +1,3 @@
-use eframe::egui::{Key, Ui};
 use eframe::epaint::ColorImage;
 use eframe::{egui, epi};
 use fast_image_resize as fir;
@@ -8,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use super::*;
 
 #[derive(Default)]
-pub struct Previewer {
+pub struct VSPreviewer {
     pub script: Arc<Mutex<PreviewedScript>>,
     pub reload_data: Option<Promise<(HashMap<i32, VSOutput>, APreviewFrame)>>,
     pub state: PreviewState,
@@ -27,7 +26,7 @@ pub struct Previewer {
     pub inputs_focused: HashMap<&'static str, bool>,
 }
 
-impl Previewer {
+impl VSPreviewer {
     pub fn process_image(
         orig: &ColorImage,
         state: &PreviewState,
@@ -121,7 +120,7 @@ impl Previewer {
             let target_size = dimensions_for_window(win_size, orig_size).round();
 
             if orig_size != target_size {
-                let fr_filter = fir::FilterType::from(&state.upsample_filter);
+                let fr_filter = fir::FilterType::from(&state.upsampling_filter);
                 img = resize_fast(img, target_size.x as u32, target_size.y as u32, fr_filter);
             }
         }
@@ -177,7 +176,7 @@ impl Previewer {
 
                 // Return unprocess while we don't have a proper window size
                 let processed_image = if win_size.min_elem() > 0.0 {
-                    Previewer::process_image(&vsframe.frame_image, &state, &win_size)
+                    VSPreviewer::process_image(&vsframe.frame_image, &state, &win_size)
                 } else {
                     vsframe.frame_image.clone()
                 };
@@ -250,11 +249,6 @@ impl Previewer {
         if !self.outputs.is_empty() {
             let output = self.outputs.get_mut(&self.state.cur_output).unwrap();
 
-            if self.rerender && self.replace_frame_promise.is_none() {
-                // Remove original frame props
-                output.original_props_promise = None;
-            }
-
             if output.force_reprocess {
                 self.rerender = true;
 
@@ -262,6 +256,11 @@ impl Previewer {
                 self.reprocess = output.last_frame_no == self.state.cur_frame_no;
 
                 output.force_reprocess = false;
+            }
+
+            if self.rerender && !self.reprocess {
+                // Remove original frame props when a VS render is requested
+                output.original_props_promise = None;
             }
         }
 
@@ -328,7 +327,7 @@ impl Previewer {
             if let Ok(mut pf) = pf.write() {
                 // Reprocess and update texture
                 let processed_image =
-                    Previewer::process_image(&pf.vsframe.frame_image, &state, &win_size);
+                    Self::process_image(&pf.vsframe.frame_image, &state, &win_size);
                 pf.texture = ctx.load_texture("frame", processed_image);
             };
 
@@ -344,7 +343,7 @@ impl Previewer {
                     &state.frame_transform_opts,
                 )
                 .unwrap();
-            let processed_image = Previewer::process_image(&vsframe.frame_image, &state, &win_size);
+            let processed_image = Self::process_image(&vsframe.frame_image, &state, &win_size);
 
             let pf = RwLock::new(PreviewFrame {
                 vsframe,
@@ -358,224 +357,6 @@ impl Previewer {
         frame.request_repaint();
 
         pf
-    }
-
-    pub fn handle_keypresses(&mut self, ui: &mut Ui) {
-        let mut rerender = self.check_update_seek(ui);
-        rerender |= self.check_update_output(ui);
-
-        if ui.input().key_pressed(Key::S) {
-            self.save_screenshot();
-        }
-
-        self.rerender = rerender;
-    }
-
-    /// Returns whether to rerender
-    pub fn check_update_seek(&mut self, ui: &mut Ui) -> bool {
-        // Must not have modifiers
-        if !ui.input().modifiers.is_none() {
-            return false;
-        }
-
-        let output = self.outputs.get_mut(&self.state.cur_output).unwrap();
-        let node_info = &output.vsoutput.node_info;
-
-        let current = self.state.cur_frame_no;
-
-        let res = if ui.input().key_pressed(Key::ArrowLeft) || ui.input().key_pressed(Key::H) {
-            if current > 0 {
-                self.state.cur_frame_no -= 1;
-                true
-            } else {
-                false
-            }
-        } else if ui.input().key_pressed(Key::ArrowRight) || ui.input().key_pressed(Key::L) {
-            if current < node_info.num_frames - 1 {
-                self.state.cur_frame_no += 1;
-                true
-            } else {
-                false
-            }
-        } else if ui.input().key_pressed(Key::ArrowUp) | ui.input().key_pressed(Key::K) {
-            if current >= node_info.framerate {
-                self.state.cur_frame_no -= node_info.framerate;
-                true
-            } else if current < node_info.framerate {
-                self.state.cur_frame_no = 0;
-                true
-            } else {
-                false
-            }
-        } else if ui.input().key_pressed(Key::ArrowDown) | ui.input().key_pressed(Key::J) {
-            self.state.cur_frame_no += node_info.framerate;
-
-            self.state.cur_frame_no < node_info.num_frames - 1
-        } else {
-            false
-        };
-
-        // Update frame once it's loaded
-        output.last_frame_no = current;
-
-        self.state.cur_frame_no = self.state.cur_frame_no.clamp(0, node_info.num_frames - 1);
-
-        res
-    }
-
-    pub fn check_update_output(&mut self, ui: &mut Ui) -> bool {
-        // Must not have modifiers
-        if !ui.input().modifiers.is_none() {
-            return false;
-        }
-
-        let old_output = self.state.cur_output;
-
-        let new_output: i32 = if ui.input().key_pressed(Key::Num1) {
-            0
-        } else if ui.input().key_pressed(Key::Num2) {
-            1
-        } else if ui.input().key_pressed(Key::Num3) {
-            2
-        } else if ui.input().key_pressed(Key::Num4) {
-            3
-        } else if ui.input().key_pressed(Key::Num5) {
-            4
-        } else if ui.input().key_pressed(Key::Num6) {
-            5
-        } else if ui.input().key_pressed(Key::Num7) {
-            6
-        } else if ui.input().key_pressed(Key::Num8) {
-            7
-        } else if ui.input().key_pressed(Key::Num9) {
-            8
-        } else if ui.input().key_pressed(Key::Num0) {
-            9
-        } else {
-            -1
-        };
-
-        if new_output >= 0 && self.outputs.contains_key(&new_output) {
-            self.state.cur_output = new_output;
-
-            // Changed output
-            self.output_needs_rerender(old_output)
-        } else {
-            false
-        }
-    }
-
-    /// Size of the image to scroll/zoom, not the final texture
-    pub fn handle_move_inputs(
-        &mut self,
-        ui: &mut Ui,
-        size: &Vec2,
-        zoom_delta: f32,
-        scroll_delta: Vec2,
-    ) {
-        // Update zoom delta to take into consideration small step keyboard input
-        let mut delta = zoom_delta;
-        let small_step = delta == 1.0
-            && ui.input().modifiers.ctrl
-            && (ui.input().key_pressed(Key::ArrowDown) || ui.input().key_pressed(Key::ArrowUp));
-
-        if small_step {
-            if ui.input().key_pressed(Key::ArrowDown) {
-                delta = 0.0;
-            } else {
-                delta = 2.0;
-            }
-        }
-
-        let mut scroll_delta = scroll_delta;
-
-        // Keyboard based scrolling
-        if ui.input().key_pressed(Key::End) {
-            scroll_delta.x = -50.0;
-        } else if ui.input().key_pressed(Key::Home) {
-            scroll_delta.x = 50.0;
-        } else if ui.input().key_pressed(Key::PageDown) {
-            scroll_delta.y = -50.0;
-        } else if ui.input().key_pressed(Key::PageUp) {
-            scroll_delta.y = 50.0;
-        }
-
-        let win_size = self.available_size;
-
-        // Calculate zoom factor
-        let res_zoom = if delta != 1.0 {
-            // Zoom
-            let mut new_factor = self.state.zoom_factor;
-            let zoom_modifier = if small_step { 0.1 } else { 1.0 };
-
-            // Ignore 1.0 delta, means no zoom done
-            if delta < 1.0 {
-                // Smaller unzooming when below 1.0
-                if new_factor <= 1.0 {
-                    new_factor -= 0.125;
-                } else if !small_step && self.state.zoom_multiplier > 1.0 {
-                    new_factor /= self.state.zoom_multiplier;
-                } else {
-                    new_factor -= zoom_modifier;
-                }
-            } else if delta > 1.0 {
-                if new_factor < 1.0 {
-                    // Zoom back from a unzoomed state
-                    // Go back to no zoom
-                    new_factor += 0.125;
-                } else if !small_step && self.state.zoom_multiplier > 1.0 {
-                    new_factor *= self.state.zoom_multiplier;
-                } else {
-                    new_factor += zoom_modifier;
-                }
-            }
-
-            let min = if self.state.upscale_to_window {
-                1.0
-            } else {
-                MIN_ZOOM
-            };
-
-            new_factor = new_factor.clamp(min, MAX_ZOOM);
-
-            if new_factor != self.state.zoom_factor {
-                let trunc_factor = if new_factor < 1.0 { 1000.0 } else { 10.0 };
-                self.state.zoom_factor = (new_factor * trunc_factor).round() / trunc_factor;
-
-                true
-            } else {
-                false
-            }
-        } else {
-            false
-        };
-
-        let old_translate = self.state.translate;
-
-        // Calculate new translates
-        let res_scroll = if scroll_delta.length() > 0.0 {
-            let res_multiplier = *size / win_size;
-            let final_delta = scroll_delta * res_multiplier * self.state.scroll_multiplier;
-
-            self.state.translate -= final_delta;
-
-            true
-        } else {
-            false
-        };
-
-        // NOTE: We are outside the scroll_delta condition
-        // Because we want to modify the translations on zoom as well
-        self.correct_translation_bounds(size);
-
-        let res = res_zoom || (res_scroll && old_translate != self.state.translate);
-
-        // Set other outputs to reprocess if we're modifying the image
-        if res {
-            self.reprocess_outputs();
-        }
-
-        self.rerender |= res;
     }
 
     pub fn save_screenshot(&self) {

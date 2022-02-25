@@ -1,4 +1,4 @@
-use std::num::NonZeroU32;
+use std::{collections::HashMap, num::NonZeroU32};
 
 use eframe::epaint::{Color32, ColorImage, Vec2};
 
@@ -152,5 +152,34 @@ pub const fn icon_color_for_bool(value: bool) -> (&'static str, Color32) {
         ("✅", Color32::from_rgb(0, 128, 0))
     } else {
         ("✖", Color32::from_rgb(200, 0, 0))
+    }
+}
+
+pub fn update_input_key_state<'a>(
+    map: &mut HashMap<&'a str, bool>,
+    key: &'a str,
+    val: bool,
+    res: &eframe::egui::Response,
+) -> bool {
+    if let Some(current) = map.get_mut(key) {
+        *current |= val;
+    } else {
+        map.insert(key, val);
+    }
+
+    release_on_focus_lost(map, key, res)
+}
+
+fn release_on_focus_lost<'a>(
+    map: &mut HashMap<&'a str, bool>,
+    key: &'a str,
+    res: &eframe::egui::Response,
+) -> bool {
+    if !res.has_focus() && (res.drag_released() || res.lost_focus()) {
+        map.insert(key, false);
+
+        true
+    } else {
+        false
     }
 }

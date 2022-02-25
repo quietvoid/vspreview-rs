@@ -1,20 +1,24 @@
 use std::sync::{Arc, RwLock};
 
-use eframe::epaint::Vec2;
+use eframe::{egui, epaint::Vec2};
 use poll_promise::Promise;
 
+mod epi_app;
 mod preview_filter_type;
-mod previewer;
-mod previewer_app;
+mod ui;
+mod vs_previewer;
+
+use ui::*;
 
 use preview_filter_type::PreviewFilterType;
-pub use previewer::Previewer;
+pub use vs_previewer::VSPreviewer;
 
 use super::vs_handler::{vstransform, PreviewedScript, VSFrame, VSFrameProps, VSOutput};
 use vstransform::VSTransformOptions;
 
 use crate::utils::{
     dimensions_for_window, image_from_colorimage, resize_fast, translate_norm_coeffs,
+    update_input_key_state,
 };
 
 pub const MIN_ZOOM: f32 = 0.125;
@@ -41,7 +45,7 @@ pub struct PreviewState {
     // Only upscales
     pub upscale_to_window: bool,
     /// Defaults to Bilinear
-    pub upsample_filter: PreviewFilterType,
+    pub upsampling_filter: PreviewFilterType,
 
     pub zoom_multiplier: f32,
 
@@ -63,5 +67,5 @@ pub struct PreviewOutput {
 #[derive(Clone)]
 pub struct PreviewFrame {
     pub vsframe: VSFrame,
-    pub texture: eframe::egui::TextureHandle,
+    pub texture: egui::TextureHandle,
 }

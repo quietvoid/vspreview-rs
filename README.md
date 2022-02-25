@@ -43,7 +43,8 @@ Refer to [directories-next](https://docs.rs/directories-next/2.0.0/directories_n
 - Scroll vertically: `PageUp`/`PageDown`, **Scroll wheel**  
 
 **Misc**:  
-- Reload script: `R` 
-- Show GUI: `I` (toggle)  
-- Take a screenshot: `S` (saves to script directory)  
 - Close: `Escape`, `Q`  
+- Show GUI: `I` (toggle)  
+- Reload script: `R` 
+- Take a screenshot: `S` (saves to script directory)  
+- Copy the current frame number to clipboard: `Shift` + `C`  

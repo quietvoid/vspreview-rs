@@ -1,6 +1,6 @@
 use fast_image_resize as fir;
 
-#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum PreviewFilterType {
     Point,
     Bilinear,

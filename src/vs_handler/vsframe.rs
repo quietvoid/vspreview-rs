@@ -34,7 +34,7 @@ pub struct VSFrame {
     pub props: VSFrameProps,
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, PartialEq)]
 pub struct VSFrameProps {
     pub frame_type: String,
 
@@ -52,14 +52,14 @@ pub struct VSFrameProps {
     pub is_dolbyvision: bool,
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct Hdr10Metadata {
     pub mastering_display: MdcvMetadata,
     pub maxcll: Option<f64>,
     pub maxfall: Option<f64>,
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct MdcvMetadata {
     pub lum_min: f64,
     pub lum_max: f64,

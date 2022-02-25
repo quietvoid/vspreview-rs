@@ -2109,7 +2109,7 @@ dependencies = [
 [[package]]
 name = "vapoursynth"
 version = "0.3.0"
-source = "git+https://github.com/YaLTeR/vapoursynth-rs.git#074417335ff9c139956c62771835798c9a302e67"
+source = "git+https://github.com/YaLTeR/vapoursynth-rs.git#21d155f378ff7073b3163d042a1f895a89c13dd8"
 dependencies = [
  "anyhow",
  "bitflags",
@@ -2121,7 +2121,7 @@ dependencies = [
 [[package]]
 name = "vapoursynth-sys"
 version = "0.3.0"
-source = "git+https://github.com/YaLTeR/vapoursynth-rs.git#074417335ff9c139956c62771835798c9a302e67"
+source = "git+https://github.com/YaLTeR/vapoursynth-rs.git#21d155f378ff7073b3163d042a1f895a89c13dd8"
 dependencies = [
  "cfg-if 1.0.0",
 ]
