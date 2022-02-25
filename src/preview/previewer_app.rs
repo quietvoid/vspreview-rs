@@ -259,8 +259,10 @@ impl Previewer {
 
                 let mut slider_frame_no = self.state.cur_frame_no;
 
+                // We want a bit more precision to within ~50 frames
                 let frames_slider =
                     egui::Slider::new(&mut slider_frame_no, 0..=(node_info.num_frames - 1))
+                        .smart_aim(false)
                         .integer();
 
                 let slider_res = ui.add(frames_slider);
@@ -409,11 +411,9 @@ impl Previewer {
                         ui.label(props.color_range.to_string());
                         ui.end_row();
 
-                        if let Some(chromaloc) = props.chroma_location {
-                            ui.label(RichText::new("Chroma location").color(STATE_LABEL_COLOR));
-                            ui.label(chromaloc.to_string());
-                            ui.end_row();
-                        }
+                        ui.label(RichText::new("Chroma location").color(STATE_LABEL_COLOR));
+                        ui.label(props.chroma_location.to_string());
+                        ui.end_row();
 
                         ui.label(RichText::new("Primaries").color(STATE_LABEL_COLOR));
                         ui.label(props.primaries.to_string());
@@ -427,11 +427,6 @@ impl Previewer {
                         ui.label(props.transfer.to_string());
                         ui.end_row();
 
-                        let (v, color) = crate::utils::icon_color_for_bool(props.is_dolbyvision);
-                        ui.label(RichText::new("Dolby Vision").color(STATE_LABEL_COLOR));
-                        ui.label(RichText::new(v).size(20.0).color(color));
-                        ui.end_row();
-
                         if let Some(sc) = props.is_scenecut {
                             let (v, color) = crate::utils::icon_color_for_bool(sc);
 
@@ -439,6 +434,59 @@ impl Previewer {
                             ui.label(RichText::new(v).size(20.0).color(color));
                             ui.end_row();
                         }
+
+                        if let Some(hdr10_meta) = props.hdr10_metadata {
+                            ui.label(RichText::new("Mastering display").color(STATE_LABEL_COLOR));
+
+                            let prim_label =
+                                egui::Label::new(hdr10_meta.mastering_display.to_string())
+                                    .sense(egui::Sense::click());
+                            let mdcv_res = ui.add(prim_label);
+
+                            ui.scope(|ui| {
+                                if mdcv_res
+                                    .on_hover_text("Click to copy x265 setting")
+                                    .clicked()
+                                {
+                                    let arg = format!(
+                                        "--master-display \"{}\"",
+                                        hdr10_meta.mastering_display.x265_string()
+                                    );
+                                    ui.output().copied_text = arg;
+                                }
+                            });
+                            ui.end_row();
+
+                            if let (Some(maxcll), Some(maxfall)) =
+                                (hdr10_meta.maxcll, hdr10_meta.maxfall)
+                            {
+                                ui.label(
+                                    RichText::new("Content light level").color(STATE_LABEL_COLOR),
+                                );
+
+                                let cll_label = egui::Label::new(format!(
+                                    "MaxCLL: {maxcll}, MaxFALL: {maxfall}"
+                                ))
+                                .sense(egui::Sense::click());
+                                let cll_res = ui.add(cll_label);
+
+                                ui.scope(|ui| {
+                                    if cll_res
+                                        .on_hover_text("Click to copy x265 setting")
+                                        .clicked()
+                                    {
+                                        let arg = format!("--maxcll \"{},{}\"", maxcll, maxfall);
+                                        ui.output().copied_text = arg;
+                                    }
+                                });
+                                ui.end_row();
+                            }
+                        }
+
+                        let (v, color) = crate::utils::icon_color_for_bool(props.is_dolbyvision);
+                        ui.label(RichText::new("Dolby Vision").color(STATE_LABEL_COLOR));
+                        ui.label(RichText::new(v).size(20.0).color(color));
+                        ui.end_row();
 
                         if let Some(cambi) = props.cambi_score {
                             let rounded = egui::emath::round_to_decimals(cambi, 4);
@@ -449,7 +497,7 @@ impl Previewer {
 
                         ui.label("");
                         ui.with_layout(egui::Layout::right_to_left(), |ui| {
-                            let reload_btn = ui.button("Reload original");
+                            let reload_btn = ui.button("Reload original props");
 
                             if reload_btn.clicked() {
                                 self.fetch_original_props(frame);

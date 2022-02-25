@@ -1,16 +1,33 @@
 # vspreview-rs
 Minimal and functional VapourSynth script previewer  
 
-## Dependencies
+### Dependencies
 See [eframe](https://github.com/emilk/egui/tree/master/eframe) dependencies.
 
-## Building
+### Building
+The minimum Rust version to build `vspreview-rs` is 1.58.1.
+
 `RUSTFLAGS="-C target-cpu=native" cargo build --release`  
 Targeting the CPU is highly recommended to get the most performance.
 
 ### Running
 `cargo run --release -- script.vpy`  
 `vspreview-rs script.vpy`  
+
+### GUI
+
+The togglable GUI includes information about the clip as well as interactive controls.  
+Also, frame props are easily accessible.
+
+Main parts of the UI:
+- A window with the current state, including access to frame props and settings.
+- A bottom panel with a slider to change frame quickly, as well as the clip info.
+
+See more from the [UI documentation](UI.md).
+
+### Config
+Using `egui`, the state is persisted across runs.  
+Refer to [directories-next](https://docs.rs/directories-next/2.0.0/directories_next/struct.ProjectDirs.html#method.data_dir) docs.
 
 ### Keybindings
 
@@ -30,7 +47,3 @@ Targeting the CPU is highly recommended to get the most performance.
 - Show GUI: `I` (toggle)  
 - Take a screenshot: `S` (saves to script directory)  
 - Close: `Escape`, `Q`  
-
-### Config
-Using `egui`, the state is persisted across runs.  
-Refer to [directories-next](https://docs.rs/directories-next/2.0.0/directories_next/struct.ProjectDirs.html#method.data_dir) docs.
