@@ -7,19 +7,14 @@ impl UiFrameProps {
         let output = pv.outputs.get(&pv.state.cur_output).unwrap();
         let mut props = None;
 
-        if let Some(promise) = &output.frame_promise {
-            if let Some(pf) = promise.ready() {
-                if let Ok(pf) = &pf.read() {
-                    props = Some(pf.vsframe.props)
-                }
-            }
+        if let Some(pf) = &output.rendered_frame {
+            let pf = pf.read();
+            props = Some(pf.vsframe.props);
         }
 
         // Overwrite from original if available
-        if let Some(promise) = &output.original_props_promise {
-            if let Some(Some(p)) = promise.ready() {
-                props = Some(*p);
-            }
+        if let Some(original_props) = &output.original_props {
+            props = Some(*original_props);
         }
 
         if let Some(props) = props {

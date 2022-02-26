@@ -1,6 +1,5 @@
 use eframe::egui::style::Margin;
-use eframe::egui::{Key, Visuals};
-use eframe::epaint::{self, Color32, Stroke};
+use eframe::epaint::{Color32, Stroke};
 use eframe::{
     egui::{self, Frame},
     epi,
@@ -19,6 +18,7 @@ impl epi::App for VSPreviewer {
         frame: &epi::Frame,
         _storage: Option<&dyn epi::Storage>,
     ) {
+        // Load existing or default state
         if let Some(storage) = _storage {
             self.state = epi::get_value(storage, epi::APP_KEY).unwrap_or(PreviewState {
                 zoom_factor: 1.0,
@@ -26,9 +26,15 @@ impl epi::App for VSPreviewer {
                 scroll_multiplier: 1.0,
                 canvas_margin: 0.0,
                 ..Default::default()
-            })
+            });
         }
 
+        // Set the global theme, default to dark mode
+        let mut global_visuals = egui::style::Visuals::dark();
+        global_visuals.window_shadow = egui::epaint::Shadow::small_light();
+        ctx.set_visuals(global_visuals);
+
+        // Fix invalid state options
         if self.state.scroll_multiplier <= 0.0 {
             self.state.scroll_multiplier = 1.0;
         }
@@ -40,7 +46,8 @@ impl epi::App for VSPreviewer {
             self.state.zoom_multiplier = 2.0;
         }
 
-        self.reload(ctx.clone(), frame.clone(), true);
+        // Request initial outputs
+        self.reload(frame.clone());
     }
 
     fn update(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
@@ -50,52 +57,26 @@ impl epi::App for VSPreviewer {
         self.check_reload_finish();
 
         // We want a new frame
-        // Previously rendering frames must have completed
-        self.check_rerender(ctx, frame);
+        // Previously rendering frames must have completed to request a new one
+        self.try_rerender(frame);
 
         // Poll new requested frame, replace old if ready
-        if let Some(promise) = self.replace_frame_promise.as_ref() {
-            if promise.poll().is_ready() {
-                let output = self.outputs.get_mut(&cur_output).unwrap();
-                output.frame_promise = Some(self.replace_frame_promise.take().unwrap());
+        self.check_rerender_finish(ctx);
 
-                // Update last output once the new frame is rendered
-                self.last_output_key = cur_output;
-            }
-        }
+        // Check for original props if requested
+        self.check_original_props_finish();
 
         let has_current_output = !self.outputs.is_empty() && self.outputs.contains_key(&cur_output);
-        let new_frame = Frame::default()
+        let panel_frame = Frame::default()
             .fill(Color32::from_gray(51))
             .margin(Margin::same(self.state.canvas_margin))
             .stroke(Stroke::none());
 
-        let mut global_visuals = Visuals::dark();
-        global_visuals.window_shadow = epaint::Shadow::small_light();
-
         egui::CentralPanel::default()
-            .frame(new_frame)
+            .frame(panel_frame)
             .show(ctx, |ui| {
-                ui.ctx().set_visuals(global_visuals);
-
-                // Don't allow quit when inputs are still focused
-                if !self.any_input_focused() {
-                    if ui.input().key_pressed(Key::Q) || ui.input().key_pressed(Key::Escape) {
-                        frame.quit();
-                    } else if ui.input().key_pressed(Key::I) {
-                        self.state.show_gui = !self.state.show_gui;
-
-                        // Clear if the GUI is hidden
-                        if !self.state.show_gui {
-                            self.inputs_focused.clear();
-                        }
-                    } else if ui.input().modifiers.ctrl
-                        && ui.input().modifiers.shift
-                        && ui.input().key_pressed(Key::C)
-                    {
-                        ui.output().copied_text = self.state.cur_frame_no.to_string();
-                    }
-                }
+                // Check for quit, GUI toggle, etc.
+                self.check_misc_keyboard_inputs(frame, ui);
 
                 // React on canvas resolution change
                 if self.available_size != ui.available_size() {
@@ -110,7 +91,7 @@ impl epi::App for VSPreviewer {
                 }
 
                 // Centered image painted on
-                UiPreviewImage::ui(self, ctx, frame, ui);
+                UiPreviewImage::ui(self, frame, ui);
 
                 // Bottom panel
                 if self.state.show_gui && has_current_output {
@@ -118,7 +99,7 @@ impl epi::App for VSPreviewer {
                 }
 
                 // Check at the end of frame for reprocessing
-                self.check_rerender(ctx, frame);
+                self.try_rerender(frame);
             });
     }
 

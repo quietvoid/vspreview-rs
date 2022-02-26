@@ -30,7 +30,7 @@ const KEY_HDR10_MAXFALL: &str = "ContentLightLevelAverage";
 
 #[derive(Default, Clone)]
 pub struct VSFrame {
-    pub frame_image: DynamicImage,
+    pub image: DynamicImage,
     pub props: VSFrameProps,
 }
 

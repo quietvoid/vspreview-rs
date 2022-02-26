@@ -42,7 +42,7 @@ impl UiControls {
             pv.state.cur_output = new_output;
 
             let out = pv.outputs.get_mut(&old_output).unwrap();
-            out.original_props_promise = None;
+            out.original_props = None;
 
             if pv.output_needs_rerender(old_output) {
                 pv.rerender = true;

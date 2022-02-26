@@ -136,9 +136,9 @@ impl PreviewedScript {
 
                 let frame = node.get_frame(frame_no as usize).unwrap();
                 let props = VSFrameProps::from_mapref(frame.props());
-                let frame_image = frame_to_dynimage(&frame);
+                let image = frame_to_dynimage(&frame);
 
-                Some(VSFrame { frame_image, props })
+                Some(VSFrame { image, props })
             }
             Err(e) => {
                 println!("{:?}", e);
@@ -161,10 +161,6 @@ impl PreviewedScript {
                 None
             }
         }
-    }
-
-    pub fn is_initialized(&self) -> bool {
-        self.env.is_some()
     }
 
     pub fn get_script_dir(&self) -> PathBuf {

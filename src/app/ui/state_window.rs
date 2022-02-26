@@ -12,10 +12,9 @@ impl UiStateWindow {
             .collapsible(false)
             .show(ctx, |ui| {
                 UiControls::ui(pv, ui);
+                ui.separator();
 
                 if has_current_output {
-                    ui.separator();
-
                     UiFrameProps::ui(pv, frame, ui);
                 }
 

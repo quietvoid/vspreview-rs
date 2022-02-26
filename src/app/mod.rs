@@ -1,6 +1,8 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use eframe::{egui, epaint::Vec2};
+use image::DynamicImage;
+use parking_lot::{Mutex, RwLock};
 use poll_promise::Promise;
 
 mod epi_app;
@@ -23,8 +25,9 @@ use crate::utils::{
 pub const MIN_ZOOM: f32 = 0.125;
 pub const MAX_ZOOM: f32 = 64.0;
 
-type APreviewFrame = Arc<RwLock<PreviewFrame>>;
-type FramePromise = Promise<APreviewFrame>;
+type VSPreviewFrame = Arc<RwLock<PreviewFrame>>;
+type FramePromise = Promise<VSPreviewFrame>;
+type PropsPromise = Promise<Option<VSFrameProps>>;
 
 /// TODO:
 ///   - Canvas background color
@@ -59,15 +62,16 @@ pub struct PreviewState {
 pub struct PreviewOutput {
     pub vsoutput: VSOutput,
 
-    pub frame_promise: Option<FramePromise>,
-    pub original_props_promise: Option<Promise<Option<VSFrameProps>>>,
+    pub rendered_frame: Option<VSPreviewFrame>,
+    pub original_props: Option<VSFrameProps>,
 
     pub force_reprocess: bool,
     pub last_frame_no: u32,
 }
 
-#[derive(Clone)]
 pub struct PreviewFrame {
     pub vsframe: VSFrame,
-    pub texture: egui::TextureHandle,
+
+    pub processed_image: DynamicImage,
+    pub texture: Mutex<Option<egui::TextureHandle>>,
 }

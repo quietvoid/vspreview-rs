@@ -8,14 +8,14 @@ pub struct UiPreferences {}
 
 impl UiPreferences {
     pub fn ui(pv: &mut VSPreviewer, ui: &mut egui::Ui) {
-        let header = RichText::new("Preferences").color(STATE_LABEL_COLOR);
-
         let old_vs_resizer = pv.state.frame_transform_opts.resizer;
         let old_enable_dithering = pv.state.frame_transform_opts.enable_dithering;
         let old_dither_algo = pv.state.frame_transform_opts.dither_algo;
 
         let old_upscale_flag = pv.state.upscale_to_window;
         let old_upsampling_filter = pv.state.upsampling_filter;
+
+        let header = RichText::new("Preferences").color(STATE_LABEL_COLOR);
 
         egui::CollapsingHeader::new(header).show(ui, |ui| {
             egui::Grid::new("prefs_grid")

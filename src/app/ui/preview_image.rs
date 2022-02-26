@@ -3,7 +3,7 @@ use super::{egui, egui::Key, epaint::Vec2, epi, VSPreviewer, MAX_ZOOM, MIN_ZOOM}
 pub struct UiPreviewImage {}
 
 impl UiPreviewImage {
-    pub fn ui(pv: &mut VSPreviewer, ctx: &egui::Context, frame: &epi::Frame, ui: &mut egui::Ui) {
+    pub fn ui(pv: &mut VSPreviewer, frame: &epi::Frame, ui: &mut egui::Ui) {
         let cur_output = pv.state.cur_output;
         let has_current_output = !pv.outputs.is_empty() && pv.outputs.contains_key(&cur_output);
 
@@ -21,58 +21,57 @@ impl UiPreviewImage {
         let zoom_delta = ui.input().zoom_delta();
         let scroll_delta = ui.input().scroll_delta;
 
-        ui.centered_and_justified(|ui| {
-            // Acquire frame texture to render now
-            let frame_promise = if has_current_output {
-                let output = pv.outputs.get(&cur_output).unwrap();
+        // Acquire frame texture to render now
+        let preview_frame = if has_current_output {
+            let output = pv.outputs.get(&cur_output).unwrap();
 
-                if output_diff_frame {
-                    None
-                } else {
-                    output.frame_promise.as_ref()
-                }
-            } else {
+            if output_diff_frame {
                 None
-            };
+            } else {
+                output.rendered_frame.as_ref().map(Clone::clone)
+            }
+        } else {
+            None
+        };
 
-            if pv.reload_data.is_some() || frame_promise.is_none() {
-                ui.add(egui::Spinner::new().size(200.0));
-            } else if let Some(promise) = frame_promise {
-                if let Some(pf) = promise.ready() {
-                    let mut image_size: Option<[f32; 2]> = None;
+        let mut painted_image = false;
 
-                    if let Ok(pf) = &pf.read() {
-                        image_size = Some([
-                            pf.vsframe.frame_image.width() as f32,
-                            pf.vsframe.frame_image.height() as f32,
-                        ]);
+        ui.centered_and_justified(|ui| {
+            if let Some(pf) = preview_frame {
+                if let Some(pf) = pf.try_read() {
+                    if let Some(texture_mutex) = pf.texture.try_lock() {
+                        if let Some(texture) = &*texture_mutex {
+                            let tex_size = texture.size_vec2();
+                            ui.image(texture.id(), tex_size);
 
-                        let tex_size = pf.texture.size_vec2();
-                        ui.image(&pf.texture, tex_size);
-                    }
+                            painted_image = true;
 
-                    if !pv.any_input_focused() {
-                        // We could read the image rendered
-                        if let Some(image_size) = image_size {
-                            if !pv.rerender && pv.replace_frame_promise.is_none() {
-                                let size = Vec2::from(image_size);
+                            let image = &pf.vsframe.image;
+                            let image_size =
+                                Vec2::from([image.width() as f32, image.height() as f32]);
 
-                                Self::handle_move_inputs(pv, ui, &size, zoom_delta, scroll_delta);
-                                Self::handle_keypresses(pv, ctx, frame, ui);
+                            if !pv.any_input_focused() && !pv.frame_promise.is_locked() {
+                                Self::handle_move_inputs(
+                                    pv,
+                                    ui,
+                                    &image_size,
+                                    zoom_delta,
+                                    scroll_delta,
+                                );
+                                Self::handle_keypresses(pv, frame, ui);
                             }
                         }
                     }
                 }
             }
+
+            if !painted_image {
+                ui.add(egui::Spinner::new().size(200.0));
+            }
         });
     }
 
-    pub fn handle_keypresses(
-        pv: &mut VSPreviewer,
-        ctx: &egui::Context,
-        frame: &epi::Frame,
-        ui: &mut egui::Ui,
-    ) {
+    pub fn handle_keypresses(pv: &mut VSPreviewer, frame: &epi::Frame, ui: &mut egui::Ui) {
         let mut rerender = Self::check_update_seek(pv, ui);
         rerender |= Self::check_update_output(pv, ui);
 
@@ -83,7 +82,7 @@ impl UiPreviewImage {
         pv.rerender = rerender;
 
         if ui.input().key_pressed(Key::R) {
-            pv.reload(ctx.clone(), frame.clone(), true)
+            pv.reload(frame.clone())
         }
     }
 

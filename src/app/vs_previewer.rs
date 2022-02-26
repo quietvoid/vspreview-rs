@@ -1,9 +1,11 @@
-use eframe::epaint::ColorImage;
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use eframe::egui::Key;
 use eframe::{egui, epi};
 use fast_image_resize as fir;
 use image::DynamicImage;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use parking_lot::{Mutex, RwLock};
 
 use crate::utils::image_to_colorimage;
 
@@ -12,21 +14,29 @@ use super::*;
 #[derive(Default)]
 pub struct VSPreviewer {
     pub script: Arc<Mutex<PreviewedScript>>,
-    pub reload_data: Option<Promise<(HashMap<i32, VSOutput>, APreviewFrame)>>,
     pub state: PreviewState,
 
-    pub initialized: bool,
-
+    /// Promise returning the newly reloaded outputs
+    pub reload_data: Option<Promise<HashMap<i32, VSOutput>>>,
+    /// Outputs available from the script
     pub outputs: HashMap<i32, PreviewOutput>,
+    /// Last output used
     pub last_output_key: i32,
 
-    pub rerender: bool,
-    pub reprocess: bool,
-    pub replace_frame_promise: Option<FramePromise>,
-
+    /// Canvas drawing available size
     pub available_size: Vec2,
-
+    /// Map of the currently active inputs
     pub inputs_focused: HashMap<&'static str, bool>,
+
+    /// Force rerender/reprocess
+    pub rerender: bool,
+    /// Override to only reprocess without requesting a new VS frame
+    pub reprocess: bool,
+
+    /// Promise returning a new requested frame
+    pub frame_promise: Arc<Mutex<Option<FramePromise>>>,
+    /// Promise returning the original props of the current frame
+    pub original_props_promise: Arc<Mutex<Option<PropsPromise>>>,
 }
 
 impl VSPreviewer {
@@ -34,7 +44,7 @@ impl VSPreviewer {
         orig: &DynamicImage,
         state: &PreviewState,
         win_size: &eframe::epaint::Vec2,
-    ) -> ColorImage {
+    ) -> DynamicImage {
         // Rounded up
         let win_size = win_size.round();
 
@@ -53,7 +63,7 @@ impl VSPreviewer {
         };
 
         if !needs_processing {
-            return image_to_colorimage(orig);
+            return orig.clone();
         }
 
         let src_size = Vec2::from([orig.width() as f32, orig.height() as f32]);
@@ -146,76 +156,34 @@ impl VSPreviewer {
             }
         }
 
-        image_to_colorimage(&img)
+        img
     }
 
-    pub fn reload(&mut self, ctx: egui::Context, frame: epi::Frame, force_reload: bool) {
-        let state = self.state;
-        let cur_output = state.cur_output;
-        let cur_frame_no = state.cur_frame_no;
-
+    // Always reloads the script
+    pub fn reload(&mut self, frame: epi::Frame) {
         let script = self.script.clone();
-        let win_size = self.available_size;
 
         self.reload_data = Some(poll_promise::Promise::spawn_thread(
             "initialization/reload",
             move || {
-                // This is OK because we didn't have an initial texture
-                let mut mutex = script.lock().unwrap();
+                let mut script_mutex = script.lock();
+                script_mutex.reload();
 
-                if force_reload || !mutex.is_initialized() {
-                    mutex.reload();
-                }
-
-                let outputs = mutex.get_outputs();
+                let outputs = script_mutex.get_outputs();
                 assert!(!outputs.is_empty());
 
-                let output_no = if !outputs.contains_key(&cur_output) {
-                    // Fallback to first output in order
-                    let mut keys: Vec<&i32> = outputs.keys().collect();
-                    keys.sort();
-
-                    **keys.first().unwrap()
-                } else {
-                    cur_output
-                };
-
-                // Adjust frame number to max of node
-                let cur_frame_no = if let Some(output) = outputs.get(&output_no) {
-                    let max_frame = output.node_info.num_frames - 1;
-                    cur_frame_no.min(max_frame)
-                } else {
-                    cur_frame_no
-                };
-
-                let vsframe = mutex
-                    .get_frame(output_no, cur_frame_no, &state.frame_transform_opts)
-                    .unwrap();
-
-                // Return unprocess while we don't have a proper window size
-                let processed_image = if win_size.min_elem() > 0.0 {
-                    VSPreviewer::process_image(&vsframe.frame_image, &state, &win_size)
-                } else {
-                    image_to_colorimage(&vsframe.frame_image)
-                };
-
-                let pf = PreviewFrame {
-                    vsframe,
-                    texture: ctx.load_texture("initial_frame", processed_image),
-                };
-
+                // Not ready but we need to get the checker going
                 frame.request_repaint();
 
-                (outputs, Arc::new(RwLock::new(pf)))
+                outputs
             },
         ));
     }
 
     pub fn check_reload_finish(&mut self) {
         if let Some(promise) = &self.reload_data {
-            if let Some(data) = promise.ready() {
-                self.outputs = data
-                    .0
+            if let Some(outputs) = promise.ready() {
+                self.outputs = outputs
                     .iter()
                     .map(|(key, o)| {
                         let new = PreviewOutput {
@@ -227,9 +195,9 @@ impl VSPreviewer {
                     })
                     .collect();
 
-                if !data.0.contains_key(&self.state.cur_output) {
+                if !self.outputs.contains_key(&self.state.cur_output) {
                     // Fallback to first output in order
-                    let mut keys: Vec<&i32> = data.0.keys().collect();
+                    let mut keys: Vec<&i32> = self.outputs.keys().collect();
                     keys.sort();
 
                     self.state.cur_output = **keys.first().unwrap();
@@ -238,11 +206,6 @@ impl VSPreviewer {
                 let output = self.outputs.get_mut(&self.state.cur_output).unwrap();
                 let node_info = &output.vsoutput.node_info;
 
-                let (sender, promise) = Promise::new();
-                sender.send(data.1.clone());
-
-                output.frame_promise = Some(promise);
-
                 self.reload_data = None;
                 self.last_output_key = self.state.cur_output;
 
@@ -250,20 +213,13 @@ impl VSPreviewer {
                     self.state.cur_frame_no = node_info.num_frames - 1;
                 }
 
-                // First reload
-                if !self.initialized {
-                    self.initialized = true;
-
-                    // Force rerender once we have the initial window size
-                    if self.state.upscale_to_window {
-                        self.rerender = true;
-                    }
-                }
+                // Fetch a frame for new current output
+                self.rerender = true;
             }
         }
     }
 
-    pub fn check_rerender(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
+    pub fn try_rerender(&mut self, frame: &epi::Frame) {
         if !self.outputs.is_empty() {
             let output = self.outputs.get_mut(&self.state.cur_output).unwrap();
 
@@ -278,63 +234,95 @@ impl VSPreviewer {
 
             if self.rerender && !self.reprocess {
                 // Remove original frame props when a VS render is requested
-                output.original_props_promise = None;
+                output.original_props = None;
             }
         }
 
-        if self.rerender && self.replace_frame_promise.is_none() {
-            self.rerender = false;
+        if self.rerender {
+            if let Some(mut promise) = self.frame_promise.try_lock() {
+                self.rerender = false;
 
-            let reprocess = self.reprocess;
-            self.reprocess = false;
+                let reprocess = self.reprocess;
+                self.reprocess = false;
 
-            let script = self.script.clone();
-            let win_size = self.available_size;
+                let script = self.script.clone();
+                let win_size = self.available_size;
 
-            let pf = if reprocess {
-                self.get_current_frame()
-            } else {
-                None
-            };
+                let pf = if reprocess {
+                    self.get_current_frame()
+                } else {
+                    None
+                };
 
-            let state = self.state;
+                let state = self.state;
 
-            let ctx = ctx.clone();
-            let frame = frame.clone();
+                let frame = frame.clone();
+                let frame_mutex = self.frame_promise.clone();
 
-            self.replace_frame_promise = Some(poll_promise::Promise::spawn_thread(
-                "fetch_frame",
-                move || Self::get_preview_image(ctx, frame, script, state, pf, reprocess, win_size),
-            ));
+                *promise = Some(poll_promise::Promise::spawn_thread(
+                    "fetch_frame",
+                    move || {
+                        let _lock = frame_mutex.lock();
+                        Self::get_preview_image(frame, script, state, pf, reprocess, win_size)
+                    },
+                ));
+            }
         }
     }
 
-    pub fn get_current_frame(&self) -> Option<APreviewFrame> {
+    pub fn check_rerender_finish(&mut self, ctx: &egui::Context) {
+        if let Some(mut promise_mutex) = self.frame_promise.try_lock() {
+            let mut updated_tex = false;
+
+            if let Some(promise) = &*promise_mutex {
+                if let Some(rendered_frame) = promise.ready() {
+                    if let Some(pf) = rendered_frame.try_write() {
+                        if let Some(mut tex_mutex) = pf.texture.try_lock() {
+                            let output = self.outputs.get_mut(&self.state.cur_output).unwrap();
+
+                            // Set PreviewFrame from what the promise returned
+                            output.rendered_frame = Some(rendered_frame.clone());
+
+                            // Update texture on render done
+                            // Convert to ColorImage on texture change
+                            *tex_mutex = Some(
+                                ctx.load_texture("frame", image_to_colorimage(&pf.processed_image)),
+                            );
+
+                            // Update last output once the new frame is rendered
+                            self.last_output_key = output.vsoutput.index;
+
+                            updated_tex = true;
+                        }
+                    }
+                }
+            }
+
+            if updated_tex {
+                *promise_mutex = None;
+            }
+        }
+    }
+
+    pub fn get_current_frame(&self) -> Option<VSPreviewFrame> {
         if !self.outputs.is_empty() {
             let output = self.outputs.get(&self.state.cur_output).unwrap();
-
-            // Already have a frame
-            if let Some(p) = &output.frame_promise {
-                p.ready().cloned()
-            } else {
-                None
-            }
+            output.rendered_frame.clone()
         } else {
             None
         }
     }
 
     pub fn get_preview_image(
-        ctx: egui::Context,
         frame: epi::Frame,
         script: Arc<Mutex<PreviewedScript>>,
         state: PreviewState,
-        pf: Option<APreviewFrame>,
+        pf: Option<VSPreviewFrame>,
         reprocess: bool,
         win_size: Vec2,
-    ) -> APreviewFrame {
+    ) -> VSPreviewFrame {
         // This is fine because only one promise may be executing at a time
-        let mut mutex = script.lock().unwrap();
+        let mut script_mutex = script.lock();
 
         let have_existing_frame = pf.is_some();
 
@@ -342,33 +330,36 @@ impl VSPreviewer {
         let pf = if reprocess && have_existing_frame {
             let pf = pf.unwrap();
 
-            if let Ok(mut pf) = pf.write() {
-                // Reprocess and update texture
-                let processed_image =
-                    Self::process_image(&pf.vsframe.frame_image, &state, &win_size);
-                pf.texture = ctx.load_texture("frame", processed_image);
+            if let Some(mut pf) = pf.try_write() {
+                // Reprocess and update image for painting
+                pf.processed_image = Self::process_image(&pf.vsframe.image, &state, &win_size);
             };
 
             pf
         } else {
-            // println!("Requesting new frame");
-
-            // Request new frame, process and recreate texture
-            let vsframe = mutex
+            // Request new frame, process and recreate image for painting
+            let vsframe = script_mutex
                 .get_frame(
                     state.cur_output,
                     state.cur_frame_no,
                     &state.frame_transform_opts,
                 )
                 .unwrap();
-            let processed_image = Self::process_image(&vsframe.frame_image, &state, &win_size);
+            let image = Self::process_image(&vsframe.image, &state, &win_size);
 
-            let pf = RwLock::new(PreviewFrame {
-                vsframe,
-                texture: ctx.load_texture("frame", processed_image),
-            });
+            if let Some(existing_frame) = pf {
+                let mut pf = existing_frame.write();
+                pf.vsframe = vsframe;
+                pf.processed_image = image;
 
-            Arc::new(pf)
+                existing_frame.clone()
+            } else {
+                Arc::new(RwLock::new(PreviewFrame {
+                    vsframe,
+                    processed_image: image,
+                    texture: Mutex::new(None),
+                }))
+            }
         };
 
         // Once frame is ready
@@ -378,7 +369,7 @@ impl VSPreviewer {
     }
 
     pub fn save_screenshot(&self) {
-        if let Ok(script) = self.script.try_lock() {
+        if let Some(script) = self.script.try_lock() {
             let mut save_path = script.get_script_dir();
 
             let screen_file = format!(
@@ -388,19 +379,13 @@ impl VSPreviewer {
             save_path.push(screen_file);
 
             let output = self.outputs.get(&self.state.cur_output).unwrap();
-            if let Some(promise) = &output.frame_promise {
-                if let Some(pf) = promise.ready() {
-                    if let Ok(pf) = &pf.read() {
-                        pf.vsframe
-                            .frame_image
-                            .save_with_format(&save_path, image::ImageFormat::Png)
-                            .unwrap();
-                    } else {
-                        println!("Apparently the frame is being written to");
-                    }
-                } else {
-                    println!("Apparently the frame is not ready yet");
-                }
+            if let Some(pf) = &output.rendered_frame {
+                let pf = pf.read();
+
+                pf.vsframe
+                    .image
+                    .save_with_format(&save_path, image::ImageFormat::Png)
+                    .unwrap();
             } else {
                 println!("Apparently there are no frames for the current output");
             }
@@ -521,21 +506,59 @@ impl VSPreviewer {
         let cur_frame_no = self.state.cur_frame_no;
 
         let frame = frame.clone();
-
         let script = self.script.clone();
 
-        let promise = poll_promise::Promise::spawn_thread("fetch_original_props", move || {
-            if let Ok(mut mutex) = script.try_lock() {
-                let props = mutex.get_original_props(cur_output, cur_frame_no);
-                frame.request_repaint();
+        if let Some(mut promise_mutex) = self.original_props_promise.try_lock() {
+            let props_mutex = self.frame_promise.clone();
 
-                props
-            } else {
-                None
+            let promise = poll_promise::Promise::spawn_thread("fetch_original_props", move || {
+                let _lock = props_mutex.lock();
+
+                if let Some(mut mutex) = script.try_lock() {
+                    let props = mutex.get_original_props(cur_output, cur_frame_no);
+                    frame.request_repaint();
+
+                    props
+                } else {
+                    None
+                }
+            });
+
+            *promise_mutex = Some(promise);
+        }
+    }
+
+    pub fn check_original_props_finish(&mut self) {
+        if let Some(mut mutex) = self.original_props_promise.try_lock() {
+            if let Some(promise) = &*mutex {
+                if let Some(props) = promise.ready() {
+                    let output = self.outputs.get_mut(&self.state.cur_output).unwrap();
+                    output.original_props = *props;
+
+                    *mutex = None;
+                }
+            };
+        }
+    }
+
+    pub fn check_misc_keyboard_inputs(&mut self, frame: &epi::Frame, ui: &mut egui::Ui) {
+        // Don't allow quit when inputs are still focused
+        if !self.any_input_focused() {
+            if ui.input().key_pressed(Key::Q) || ui.input().key_pressed(Key::Escape) {
+                frame.quit();
+            } else if ui.input().key_pressed(Key::I) {
+                self.state.show_gui = !self.state.show_gui;
+
+                // Clear if the GUI is hidden
+                if !self.state.show_gui {
+                    self.inputs_focused.clear();
+                }
+            } else if ui.input().modifiers.ctrl
+                && ui.input().modifiers.shift
+                && ui.input().key_pressed(Key::C)
+            {
+                ui.output().copied_text = self.state.cur_frame_no.to_string();
             }
-        });
-
-        let output = self.outputs.get_mut(&cur_output).unwrap();
-        output.original_props_promise = Some(promise);
+        }
     }
 }
