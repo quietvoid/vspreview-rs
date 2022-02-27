@@ -27,8 +27,8 @@ pub fn frame_to_dynimage(frame: &FrameRef) -> DynamicImage {
     if plane_count == 1 {
         let mut buf = ImageBuffer::new(w as u32, h as u32);
 
-        buf.enumerate_rows_mut().for_each(|(i, pixels)| {
-            let y = frame.plane_row(0, i as usize);
+        buf.enumerate_rows_mut().for_each(|(row, pixels)| {
+            let y = frame.plane_row(0, row as usize);
             pixels.for_each(|(x, _, p)| *p = image::Luma([y[x as usize]]));
         });
 
@@ -36,8 +36,8 @@ pub fn frame_to_dynimage(frame: &FrameRef) -> DynamicImage {
     } else {
         let mut buf = ImageBuffer::new(w as u32, h as u32);
 
-        buf.enumerate_rows_mut().for_each(|(i, pixels)| {
-            let row = i as usize;
+        buf.enumerate_rows_mut().for_each(|(row, pixels)| {
+            let row = row as usize;
             let r = frame.plane_row(0, row);
             let g = frame.plane_row(1, row);
             let b = frame.plane_row(2, row);
@@ -95,8 +95,8 @@ pub fn resize_fast(
     }
 }
 
-pub fn dimensions_for_window(win_size: Vec2, orig_size: Vec2) -> Vec2 {
-    let mut size = orig_size;
+pub fn dimensions_for_window(win_size: &Vec2, orig_size: &Vec2) -> Vec2 {
+    let mut size = *orig_size;
 
     // Fit to width
     if orig_size.x != win_size.x {

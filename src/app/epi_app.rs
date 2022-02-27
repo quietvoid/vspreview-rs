@@ -56,15 +56,15 @@ impl epi::App for VSPreviewer {
         // Initial callback
         self.check_reload_finish();
 
-        // We want a new frame
-        // Previously rendering frames must have completed to request a new one
-        self.try_rerender(frame);
-
         // Poll new requested frame, replace old if ready
         self.check_rerender_finish(ctx);
 
         // Check for original props if requested
         self.check_original_props_finish();
+
+        // We want a new frame
+        // Previously rendering frames must have completed to request a new one
+        self.try_rerender(frame);
 
         let has_current_output = !self.outputs.is_empty() && self.outputs.contains_key(&cur_output);
         let panel_frame = Frame::default()
@@ -81,7 +81,6 @@ impl epi::App for VSPreviewer {
                 // React on canvas resolution change
                 if self.available_size != ui.available_size() {
                     self.available_size = ui.available_size();
-
                     self.reprocess_outputs();
                 }
 

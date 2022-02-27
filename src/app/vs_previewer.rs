@@ -47,32 +47,16 @@ impl VSPreviewer {
     ) -> DynamicImage {
         // Rounded up
         let win_size = win_size.round();
-
-        let needs_processing = if state.zoom_factor != 1.0
-            || state.translate_norm.length() > 0.0
-            || state.upscale_to_window
-        {
-            let orig_size = Vec2::new(orig.width() as f32, orig.height() as f32);
-
-            // Scaled size to window bounds
-            let target_size = dimensions_for_window(win_size, orig_size).round();
-
-            orig_size != target_size
-        } else {
-            false
-        };
-
-        if !needs_processing {
-            return orig.clone();
-        }
-
         let src_size = Vec2::from([orig.width() as f32, orig.height() as f32]);
+
         let (src_w, src_h) = (src_size.x, src_size.y);
 
         let mut img = orig.clone();
 
         let zoom_factor = state.zoom_factor;
         let (mut w, mut h) = (src_w as f32, src_h as f32);
+
+        println!("Processing image");
 
         // Unzoom first and foremost
         if zoom_factor < 1.0 && !state.upscale_to_window {
@@ -90,13 +74,17 @@ impl VSPreviewer {
         if w > win_size.x || h > win_size.y || zoom_factor > 1.0 {
             // Factors for translations relative to the image resolution
             // -1 means no translation, 1 means translated to the bound
-            let coeffs = translate_norm_coeffs(&src_size, &win_size, zoom_factor);
-
             let (tx_norm, ty_norm) = (state.translate_norm.x, state.translate_norm.y);
 
+            let translate_pixel = crate::utils::translate_norm_to_pixels(
+                &state.translate_norm,
+                &src_size,
+                &win_size,
+                zoom_factor,
+            );
+
             // Scale [-1, 1] coords back to pixels
-            let tx = (tx_norm.abs() * coeffs.x).round();
-            let ty = (ty_norm.abs() * coeffs.y).round();
+            let (tx, ty) = (translate_pixel.x, translate_pixel.y);
 
             // Positive = crop right part
             let x = if tx_norm.is_sign_negative() { 0.0 } else { tx };
@@ -129,7 +117,7 @@ impl VSPreviewer {
 
             let target_size = if state.upscale_to_window {
                 // Resize up to max size of window
-                dimensions_for_window(win_size, new_size).round()
+                dimensions_for_window(&win_size, &new_size).round()
             } else {
                 new_size
             };
@@ -148,7 +136,7 @@ impl VSPreviewer {
             let orig_size = Vec2::new(img.width() as f32, img.height() as f32);
 
             // Scaled size to window bounds
-            let target_size = dimensions_for_window(win_size, orig_size).round();
+            let target_size = dimensions_for_window(&win_size, &orig_size).round();
 
             if orig_size != target_size {
                 let fr_filter = fir::FilterType::from(&state.upsampling_filter);
@@ -240,6 +228,11 @@ impl VSPreviewer {
 
         if self.rerender {
             if let Some(mut promise) = self.frame_promise.try_lock() {
+                // Still rendering
+                if promise.is_some() {
+                    return;
+                }
+
                 self.rerender = false;
 
                 let reprocess = self.reprocess;
@@ -254,7 +247,11 @@ impl VSPreviewer {
                     None
                 };
 
+                // Get current state at the moment the frame is requested
                 let state = self.state;
+
+                // Reset current changed flag
+                self.state.translate_changed = false;
 
                 let frame = frame.clone();
                 let frame_mutex = self.frame_promise.clone();
@@ -262,8 +259,15 @@ impl VSPreviewer {
                 *promise = Some(poll_promise::Promise::spawn_thread(
                     "fetch_frame",
                     move || {
-                        let _lock = frame_mutex.lock();
-                        Self::get_preview_image(frame, script, state, pf, reprocess, win_size)
+                        Self::get_preview_image(
+                            frame,
+                            frame_mutex,
+                            script,
+                            state,
+                            pf,
+                            reprocess,
+                            win_size,
+                        )
                     },
                 ));
             }
@@ -276,25 +280,32 @@ impl VSPreviewer {
 
             if let Some(promise) = &*promise_mutex {
                 if let Some(rendered_frame) = promise.ready() {
-                    if let Some(pf) = rendered_frame.try_write() {
-                        if let Some(mut tex_mutex) = pf.texture.try_lock() {
-                            let output = self.outputs.get_mut(&self.state.cur_output).unwrap();
+                    // Block as it's supposed to be ready
+                    let pf = rendered_frame.read();
 
-                            // Set PreviewFrame from what the promise returned
-                            output.rendered_frame = Some(rendered_frame.clone());
+                    if let Some(mut tex_mutex) = pf.texture.try_lock() {
+                        let output = self.outputs.get_mut(&self.state.cur_output).unwrap();
 
-                            // Update texture on render done
-                            // Convert to ColorImage on texture change
-                            *tex_mutex = Some(
-                                ctx.load_texture("frame", image_to_colorimage(&pf.processed_image)),
-                            );
+                        // Set PreviewFrame from what the promise returned
+                        output.rendered_frame = Some(rendered_frame.clone());
 
-                            // Update last output once the new frame is rendered
-                            self.last_output_key = output.vsoutput.index;
+                        // Processed if available, otherwise original
+                        let final_image = if let Some(image) = &pf.processed_image {
+                            image
+                        } else {
+                            &pf.vsframe.image
+                        };
 
-                            updated_tex = true;
-                        }
-                    }
+                        // Update texture on render done
+                        // Convert to ColorImage on texture change
+                        *tex_mutex =
+                            Some(ctx.load_texture("frame", image_to_colorimage(final_image)));
+
+                        // Update last output once the new frame is rendered
+                        self.last_output_key = output.vsoutput.index;
+
+                        updated_tex = true;
+                    };
                 }
             }
 
@@ -315,6 +326,7 @@ impl VSPreviewer {
 
     pub fn get_preview_image(
         frame: epi::Frame,
+        frame_mutex: Arc<Mutex<Option<FramePromise>>>,
         script: Arc<Mutex<PreviewedScript>>,
         state: PreviewState,
         pf: Option<VSPreviewFrame>,
@@ -326,16 +338,26 @@ impl VSPreviewer {
 
         let have_existing_frame = pf.is_some();
 
+        let _lock = frame_mutex.lock();
+
         // Reuse existing image, process and recreate texture
         let pf = if reprocess && have_existing_frame {
             let pf = pf.unwrap();
 
-            if let Some(mut pf) = pf.try_write() {
-                // Reprocess and update image for painting
-                pf.processed_image = Self::process_image(&pf.vsframe.image, &state, &win_size);
-            };
+            // Force blocking as we need to reprocess the image
+            let mut existing_frame = pf.write();
+            let image = &existing_frame.vsframe.image;
+            let image_size = Vec2::from([image.width() as f32, image.height() as f32]);
 
-            pf
+            if Self::state_needs_processing(&state, &image_size, &win_size) {
+                // Reprocess and update image for painting
+                existing_frame.processed_image =
+                    Some(Self::process_image(image, &state, &win_size));
+            } else {
+                existing_frame.processed_image = None;
+            }
+
+            pf.clone()
         } else {
             // Request new frame, process and recreate image for painting
             let vsframe = script_mutex
@@ -345,18 +367,26 @@ impl VSPreviewer {
                     &state.frame_transform_opts,
                 )
                 .unwrap();
-            let image = Self::process_image(&vsframe.image, &state, &win_size);
+
+            let image_size =
+                Vec2::from([vsframe.image.width() as f32, vsframe.image.height() as f32]);
+
+            let processed_image = if Self::state_needs_processing(&state, &image_size, &win_size) {
+                Some(Self::process_image(&vsframe.image, &state, &win_size))
+            } else {
+                None
+            };
 
             if let Some(existing_frame) = pf {
                 let mut pf = existing_frame.write();
                 pf.vsframe = vsframe;
-                pf.processed_image = image;
+                pf.processed_image = processed_image;
 
                 existing_frame.clone()
             } else {
                 Arc::new(RwLock::new(PreviewFrame {
                     vsframe,
-                    processed_image: image,
+                    processed_image,
                     texture: Mutex::new(None),
                 }))
             }
@@ -396,7 +426,8 @@ impl VSPreviewer {
         }
     }
 
-    pub fn correct_translation_bounds(&mut self, size: &Vec2) {
+    // Returns fixed pixel based and normalized translation vectors
+    pub fn fix_translation_bounds(&self, image_size: &Vec2, new_translate: &Vec2) -> (Vec2, Vec2) {
         let win_size = self.available_size;
 
         // Updated zoom factor
@@ -404,27 +435,33 @@ impl VSPreviewer {
         // Reduce (unzoom) or increase max translate (zooming)
         let zoom_factor = self.state.zoom_factor;
 
-        let coeffs = translate_norm_coeffs(size, &win_size, zoom_factor);
+        let mut fixed_translate = *new_translate;
+
+        let coeffs = translate_norm_coeffs(image_size, &win_size, zoom_factor);
 
         // Clamp to valid translates
         // Min has to be negative to be able to detect when there's no translate
-        self.state.translate.x = if coeffs.x.is_sign_positive() {
-            self.state.translate.x.clamp(-0.01, coeffs.x)
+        fixed_translate.x = if coeffs.x.is_sign_positive() {
+            new_translate.x.clamp(0.0, coeffs.x)
         } else {
             // Negative means the image isn't clipped by the window rect
-            self.state.translate.x.clamp(0.0, 0.0)
+            new_translate.x.clamp(0.0, 0.0)
         };
 
-        self.state.translate.y = if coeffs.y.is_sign_positive() {
-            self.state.translate.y.clamp(-0.01, coeffs.y)
+        fixed_translate.y = if coeffs.y.is_sign_positive() {
+            new_translate.y.clamp(0.0, coeffs.y)
         } else {
             // Negative means the image isn't clipped by the window rect
-            self.state.translate.y.clamp(0.0, 0.0)
+            new_translate.y.clamp(0.0, 0.0)
         };
 
-        // Normalize to [-1, 1]
-        self.state.translate_norm.x = self.state.translate.x / coeffs.x;
-        self.state.translate_norm.y = self.state.translate.y / coeffs.y;
+        // Normalize to [0, 1]
+        let normalized_translate = Vec2::new(
+            (fixed_translate.x / coeffs.x).clamp(0.0, 1.0),
+            (fixed_translate.y / coeffs.y).clamp(0.0, 1.0),
+        );
+
+        (fixed_translate, normalized_translate)
     }
 
     // Only called when the output changes
@@ -453,41 +490,61 @@ impl VSPreviewer {
             }
         }
 
-        let coeffs = translate_norm_coeffs(&new_size, &self.available_size, self.state.zoom_factor);
-        let (tx_norm, ty_norm) = (self.state.translate_norm.x, self.state.translate_norm.y);
-
-        // Scale [-1, 1] coords back to pixels
-        self.state.translate.x = (tx_norm.abs() * coeffs.x).round();
-        self.state.translate.y = (ty_norm.abs() * coeffs.y).round();
-
-        old.last_frame_no != new.last_frame_no
-    }
-
-    pub fn correct_translate_for_current_output(&mut self) {
-        let info = {
-            let output = self.outputs.get(&self.state.cur_output).unwrap();
-            output.vsoutput.node_info.clone()
-        };
-
-        self.correct_translation_bounds(&Vec2::from([info.width as f32, info.height as f32]));
-
-        self.reprocess_outputs();
-    }
-
-    pub fn update_pixels_translation_for_current_output(&mut self) {
-        let info = {
-            let output = self.outputs.get(&self.state.cur_output).unwrap();
-            output.vsoutput.node_info.clone()
-        };
-
+        // Scale normalized coords back to pixels
+        self.state.translate_changed = true;
         self.state.translate = crate::utils::translate_norm_to_pixels(
             &self.state.translate_norm,
-            &Vec2::from([info.width as f32, info.height as f32]),
+            &new_size,
             &self.available_size,
             self.state.zoom_factor,
         );
 
-        self.correct_translate_for_current_output();
+        old.last_frame_no != new.last_frame_no
+    }
+
+    // Returns if the translate changed and we need to reprocess
+    pub fn correct_translate_for_current_output(
+        &mut self,
+        new_translate: Vec2,
+        normalized: bool,
+    ) -> bool {
+        if self.outputs.is_empty() {
+            return false;
+        }
+
+        let info = {
+            let output = self.outputs.get(&self.state.cur_output).unwrap();
+            output.vsoutput.node_info.clone()
+        };
+
+        let image_size = Vec2::from([info.width as f32, info.height as f32]);
+        let old_translate = self.state.translate;
+
+        let new_translate = if normalized {
+            crate::utils::translate_norm_to_pixels(
+                &new_translate,
+                &image_size,
+                &self.available_size,
+                self.state.zoom_factor,
+            )
+        } else {
+            new_translate
+        };
+
+        let (fix_pixel, fix_norm) = self.fix_translation_bounds(&image_size, &new_translate);
+
+        // Update if necessary
+        if fix_pixel != old_translate {
+            self.state.translate_changed = true;
+            self.state.translate = fix_pixel;
+            self.state.translate_norm = fix_norm;
+
+            self.reprocess_outputs();
+
+            true
+        } else {
+            false
+        }
     }
 
     pub fn any_input_focused(&self) -> bool {
@@ -512,9 +569,9 @@ impl VSPreviewer {
             let props_mutex = self.frame_promise.clone();
 
             let promise = poll_promise::Promise::spawn_thread("fetch_original_props", move || {
-                let _lock = props_mutex.lock();
-
                 if let Some(mut mutex) = script.try_lock() {
+                    let _lock = props_mutex.lock();
+
                     let props = mutex.get_original_props(cur_output, cur_frame_no);
                     frame.request_repaint();
 
@@ -559,6 +616,24 @@ impl VSPreviewer {
             {
                 ui.output().copied_text = self.state.cur_frame_no.to_string();
             }
+        }
+    }
+
+    pub fn state_needs_processing(
+        state: &PreviewState,
+        image_size: &Vec2,
+        win_size: &Vec2,
+    ) -> bool {
+        if state.upscale_to_window {
+            // Scaled size to window bounds
+            let target_size = dimensions_for_window(win_size, image_size).round();
+
+            // Needs to be scaled up
+            image_size.length() < target_size.length()
+        } else {
+            state.zoom_factor != 1.0
+                || state.translate_norm.length() > 0.0
+                || state.translate_changed
         }
     }
 }

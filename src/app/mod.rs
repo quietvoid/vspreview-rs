@@ -32,7 +32,7 @@ type PropsPromise = Promise<Option<VSFrameProps>>;
 /// TODO:
 ///   - Canvas background color
 ///   - ?
-#[derive(Default, Clone, Copy, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Default, Clone, Copy, serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct PreviewState {
     pub show_gui: bool,
@@ -42,6 +42,7 @@ pub struct PreviewState {
 
     pub zoom_factor: f32,
 
+    pub translate_changed: bool,
     pub translate: Vec2,
     pub translate_norm: Vec2,
 
@@ -72,6 +73,8 @@ pub struct PreviewOutput {
 pub struct PreviewFrame {
     pub vsframe: VSFrame,
 
-    pub processed_image: DynamicImage,
+    /// Can't be moved out of `VSFrame` without a copy
+    /// As an Option, we can check which image to use
+    pub processed_image: Option<DynamicImage>,
     pub texture: Mutex<Option<egui::TextureHandle>>,
 }

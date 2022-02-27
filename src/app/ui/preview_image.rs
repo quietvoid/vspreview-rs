@@ -38,31 +38,24 @@ impl UiPreviewImage {
 
         ui.centered_and_justified(|ui| {
             if let Some(pf) = preview_frame {
-                if let Some(pf) = pf.try_read() {
-                    if let Some(texture_mutex) = pf.texture.try_lock() {
-                        if let Some(texture) = &*texture_mutex {
-                            let tex_size = texture.size_vec2();
-                            ui.image(texture.id(), tex_size);
+                let pf = pf.read();
 
-                            painted_image = true;
+                if let Some(tex_mutex) = pf.texture.try_lock() {
+                    if let Some(tex) = &*tex_mutex {
+                        painted_image = true;
 
-                            let image = &pf.vsframe.image;
-                            let image_size =
-                                Vec2::from([image.width() as f32, image.height() as f32]);
+                        let tex_size = tex.size_vec2();
+                        ui.image(tex.id(), tex_size);
 
-                            if !pv.any_input_focused() && !pv.frame_promise.is_locked() {
-                                Self::handle_move_inputs(
-                                    pv,
-                                    ui,
-                                    &image_size,
-                                    zoom_delta,
-                                    scroll_delta,
-                                );
-                                Self::handle_keypresses(pv, frame, ui);
-                            }
+                        let image = &pf.vsframe.image;
+                        let image_size = Vec2::from([image.width() as f32, image.height() as f32]);
+
+                        if !pv.any_input_focused() && !pv.frame_promise.is_locked() {
+                            Self::handle_move_inputs(pv, ui, &image_size, zoom_delta, scroll_delta);
+                            Self::handle_keypresses(pv, frame, ui);
                         }
                     }
-                }
+                };
             }
 
             if !painted_image {
@@ -265,14 +258,14 @@ impl UiPreviewImage {
             false
         };
 
-        let old_translate = pv.state.translate;
+        let mut new_translate = pv.state.translate;
 
         // Calculate new translates
         let res_scroll = if scroll_delta.length() > 0.0 {
             let res_multiplier = *size / win_size;
             let final_delta = scroll_delta * res_multiplier * pv.state.scroll_multiplier;
 
-            pv.state.translate -= final_delta;
+            new_translate -= final_delta;
 
             true
         } else {
@@ -281,9 +274,9 @@ impl UiPreviewImage {
 
         // NOTE: We are outside the scroll_delta condition
         // Because we want to modify the translations on zoom as well
-        pv.correct_translation_bounds(size);
+        let reprocess_translate = pv.correct_translate_for_current_output(new_translate, false);
 
-        let res = res_zoom || (res_scroll && old_translate != pv.state.translate);
+        let res = res_zoom || (res_scroll && reprocess_translate);
 
         // Set other outputs to reprocess if we're modifying the image
         if res {

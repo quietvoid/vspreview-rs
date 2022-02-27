@@ -67,24 +67,23 @@ impl UiControls {
             pv.state.zoom_factor = new_zoom;
             pv.rerender = true;
 
-            pv.correct_translate_for_current_output();
+            pv.correct_translate_for_current_output(pv.state.translate, false);
         }
     }
 
     pub fn translate_drag_ui(pv: &mut VSPreviewer, ui: &mut egui::Ui) {
-        let old_translate = pv.state.translate_norm;
-        let mut new_translate = old_translate;
+        let mut new_translate = pv.state.translate_norm;
 
         ui.label(RichText::new("Translate").color(STATE_LABEL_COLOR));
         ui.horizontal(|ui| {
             let x_drag = egui::DragValue::new(&mut new_translate.x)
                 .speed(0.01)
-                .clamp_range(-0.01..=1.0)
+                .clamp_range(0.0..=1.0)
                 .max_decimals(3);
 
             let y_drag = egui::DragValue::new(&mut new_translate.y)
                 .speed(0.01)
-                .clamp_range(-0.01..=1.0)
+                .clamp_range(0.0..=1.0)
                 .max_decimals(3);
 
             ui.label(RichText::new("x").color(STATE_LABEL_COLOR));
@@ -100,11 +99,7 @@ impl UiControls {
             update_input_key_state(&mut pv.inputs_focused, "translate_y_dragval", in_use, &res);
         });
 
-        if new_translate != old_translate && new_translate.length() > 0.0 {
-            pv.state.translate_norm = new_translate;
-
-            pv.update_pixels_translation_for_current_output();
-            pv.rerender = true;
-        }
+        // Fix and update state
+        pv.correct_translate_for_current_output(new_translate, true);
     }
 }
