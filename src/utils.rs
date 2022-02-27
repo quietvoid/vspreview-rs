@@ -1,7 +1,7 @@
 use std::{collections::HashMap, num::NonZeroU32};
 
+use anyhow::{anyhow, Result};
 use eframe::epaint::{Color32, ColorImage, Vec2};
-
 use fast_image_resize as fr;
 use image::{DynamicImage, ImageBuffer};
 use vapoursynth::prelude::{ColorFamily, FrameRef};
@@ -58,41 +58,43 @@ pub fn resize_fast(
     dst_width: u32,
     dst_height: u32,
     filter_type: fr::FilterType,
-) -> DynamicImage {
-    let width = NonZeroU32::new(img.width()).unwrap();
-    let height = NonZeroU32::new(img.height()).unwrap();
+) -> Result<DynamicImage> {
+    let width = NonZeroU32::new(img.width()).ok_or(anyhow!("resize_fast: Invalid img width"))?;
+    let height = NonZeroU32::new(img.height()).ok_or(anyhow!("resize_fast: Invalid img height"))?;
 
     let src_image = match img {
         DynamicImage::ImageLuma8(luma) => {
-            fr::Image::from_vec_u8(width, height, luma.into_raw(), fr::PixelType::U8).unwrap()
+            fr::Image::from_vec_u8(width, height, luma.into_raw(), fr::PixelType::U8)?
         }
         DynamicImage::ImageRgb8(rgb) => {
-            fr::Image::from_vec_u8(width, height, rgb.into_raw(), fr::PixelType::U8x3).unwrap()
+            fr::Image::from_vec_u8(width, height, rgb.into_raw(), fr::PixelType::U8x3)?
         }
         _ => unreachable!(),
     };
 
     let mut dst_image = fr::Image::new(
-        NonZeroU32::new(dst_width).unwrap(),
-        NonZeroU32::new(dst_height).unwrap(),
+        NonZeroU32::new(dst_width).ok_or(anyhow!("resize_fast: Invalid dst img width"))?,
+        NonZeroU32::new(dst_height).ok_or(anyhow!("resize_fast: Invalid dst img height"))?,
         src_image.pixel_type(),
     );
     let mut dst_view = dst_image.view_mut();
 
     let mut resizer = fr::Resizer::new(fr::ResizeAlg::Convolution(filter_type));
-    resizer.resize(&src_image.view(), &mut dst_view).unwrap();
+    resizer.resize(&src_image.view(), &mut dst_view)?;
 
-    match dst_image.pixel_type() {
+    let resized_img = match dst_image.pixel_type() {
         fr::PixelType::U8 => DynamicImage::ImageLuma8(
             image::ImageBuffer::from_raw(dst_width, dst_height, dst_image.buffer().to_vec())
-                .unwrap(),
+                .ok_or(anyhow!("Failed resizing luma"))?,
         ),
         fr::PixelType::U8x3 => DynamicImage::ImageRgb8(
             image::ImageBuffer::from_raw(dst_width, dst_height, dst_image.buffer().to_vec())
-                .unwrap(),
+                .ok_or(anyhow!("Failed resizing RGB"))?,
         ),
         _ => unreachable!(),
-    }
+    };
+
+    Ok(resized_img)
 }
 
 pub fn dimensions_for_window(win_size: &Vec2, orig_size: &Vec2) -> Vec2 {

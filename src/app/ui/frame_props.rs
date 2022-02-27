@@ -1,10 +1,14 @@
 use super::{egui, egui::RichText, epi, VSPreviewer, STATE_LABEL_COLOR};
+use anyhow::{anyhow, Result};
 
 pub struct UiFrameProps {}
 
 impl UiFrameProps {
-    pub fn ui(pv: &mut VSPreviewer, frame: &epi::Frame, ui: &mut egui::Ui) {
-        let output = pv.outputs.get(&pv.state.cur_output).unwrap();
+    pub fn ui(pv: &mut VSPreviewer, frame: &epi::Frame, ui: &mut egui::Ui) -> Result<()> {
+        let output = pv
+            .outputs
+            .get(&pv.state.cur_output)
+            .ok_or(anyhow!("UiFrameProps::ui: Invalid current output key"))?;
         let mut props = None;
 
         if let Some(pf) = &output.rendered_frame {
@@ -127,5 +131,7 @@ impl UiFrameProps {
                     });
             });
         }
+
+        Ok(())
     }
 }

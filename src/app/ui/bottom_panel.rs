@@ -1,10 +1,14 @@
 use super::{egui, epaint::Color32, update_input_key_state, VSPreviewer};
+use anyhow::{anyhow, Result};
 
 pub struct UiBottomPanel {}
 
 impl UiBottomPanel {
-    pub fn ui(pv: &mut VSPreviewer, ctx: &egui::Context) {
-        let output = pv.outputs.get_mut(&pv.state.cur_output).unwrap();
+    pub fn ui(pv: &mut VSPreviewer, ctx: &egui::Context) -> Result<()> {
+        let output = pv
+            .outputs
+            .get_mut(&pv.state.cur_output)
+            .ok_or(anyhow!("UiBottomPanel::ui: Invalid current output key"))?;
         let node_info = &output.vsoutput.node_info;
 
         let transparent_frame = egui::Frame::default()
@@ -56,5 +60,7 @@ impl UiBottomPanel {
                     .size(20.0);
                 ui.label(node_info_label);
             });
+
+        Ok(())
     }
 }

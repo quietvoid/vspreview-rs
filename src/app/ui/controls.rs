@@ -2,6 +2,7 @@ use super::{
     egui, egui::RichText, update_input_key_state, VSPreviewer, MAX_ZOOM, MIN_ZOOM,
     STATE_LABEL_COLOR,
 };
+use anyhow::{anyhow, Result};
 use itertools::Itertools;
 
 pub struct UiControls {}
@@ -12,18 +13,21 @@ impl UiControls {
             .num_columns(2)
             .spacing([8.0, 4.0])
             .show(ui, |ui| {
-                Self::output_select_ui(pv, ui);
+                let mut res = Self::output_select_ui(pv, ui);
+                pv.add_error("preview", res);
                 ui.end_row();
 
-                Self::zoom_slider_ui(pv, ui);
+                res = Self::zoom_slider_ui(pv, ui);
+                pv.add_error("preview", res);
                 ui.end_row();
 
-                Self::translate_drag_ui(pv, ui);
+                res = Self::translate_drag_ui(pv, ui);
+                pv.add_error("preview", res);
                 ui.end_row();
             });
     }
 
-    pub fn output_select_ui(pv: &mut VSPreviewer, ui: &mut egui::Ui) {
+    pub fn output_select_ui(pv: &mut VSPreviewer, ui: &mut egui::Ui) -> Result<()> {
         let old_output = pv.state.cur_output;
         let mut new_output = old_output;
 
@@ -41,16 +45,21 @@ impl UiControls {
         if new_output != old_output {
             pv.state.cur_output = new_output;
 
-            let out = pv.outputs.get_mut(&old_output).unwrap();
+            let out = pv
+                .outputs
+                .get_mut(&old_output)
+                .ok_or(anyhow!("output_select_ui: Invalid old output key"))?;
             out.original_props = None;
 
-            if pv.output_needs_rerender(old_output) {
+            if pv.output_needs_rerender(old_output)? {
                 pv.rerender = true;
             }
         }
+
+        Ok(())
     }
 
-    pub fn zoom_slider_ui(pv: &mut VSPreviewer, ui: &mut egui::Ui) {
+    pub fn zoom_slider_ui(pv: &mut VSPreviewer, ui: &mut egui::Ui) -> Result<()> {
         let old_zoom = pv.state.zoom_factor;
         let mut new_zoom = old_zoom;
 
@@ -67,12 +76,15 @@ impl UiControls {
             pv.state.zoom_factor = new_zoom;
             pv.rerender = true;
 
-            pv.correct_translate_for_current_output(pv.state.translate, false);
+            pv.correct_translate_for_current_output(pv.state.translate, false)?;
         }
+
+        Ok(())
     }
 
-    pub fn translate_drag_ui(pv: &mut VSPreviewer, ui: &mut egui::Ui) {
-        let mut new_translate = pv.state.translate_norm;
+    pub fn translate_drag_ui(pv: &mut VSPreviewer, ui: &mut egui::Ui) -> Result<()> {
+        let old_translate = pv.state.translate_norm;
+        let mut new_translate = old_translate;
 
         ui.label(RichText::new("Translate").color(STATE_LABEL_COLOR));
         ui.horizontal(|ui| {
@@ -99,7 +111,11 @@ impl UiControls {
             update_input_key_state(&mut pv.inputs_focused, "translate_y_dragval", in_use, &res);
         });
 
-        // Fix and update state
-        pv.correct_translate_for_current_output(new_translate, true);
+        if old_translate != new_translate {
+            // Fix and update state
+            pv.correct_translate_for_current_output(new_translate, true)?;
+        }
+
+        Ok(())
     }
 }

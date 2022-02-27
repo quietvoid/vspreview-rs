@@ -1,17 +1,24 @@
 use super::{egui, egui::Key, epaint::Vec2, epi, VSPreviewer, MAX_ZOOM, MIN_ZOOM};
+use anyhow::{anyhow, Result};
 
 pub struct UiPreviewImage {}
 
 impl UiPreviewImage {
-    pub fn ui(pv: &mut VSPreviewer, frame: &epi::Frame, ui: &mut egui::Ui) {
+    pub fn ui(pv: &mut VSPreviewer, frame: &epi::Frame, ui: &mut egui::Ui) -> Result<()> {
         let cur_output = pv.state.cur_output;
         let has_current_output = !pv.outputs.is_empty() && pv.outputs.contains_key(&cur_output);
 
         // If the outputs differ in frame index, we should wait for the render
         // instead of rendering the old frame
         let output_diff_frame = if has_current_output {
-            let cur_output = pv.outputs.get(&cur_output).unwrap();
-            let last_output = pv.outputs.get(&pv.last_output_key).unwrap();
+            let cur_output = pv
+                .outputs
+                .get(&cur_output)
+                .ok_or(anyhow!("UiPreviewImage::ui: Invalid current output key"))?;
+            let last_output = pv
+                .outputs
+                .get(&pv.last_output_key)
+                .ok_or(anyhow!("UiPreviewImage::ui: Invalid last output key"))?;
 
             last_output.last_frame_no != cur_output.last_frame_no
         } else {
@@ -23,7 +30,9 @@ impl UiPreviewImage {
 
         // Acquire frame texture to render now
         let preview_frame = if has_current_output {
-            let output = pv.outputs.get(&cur_output).unwrap();
+            let output = pv.outputs.get(&cur_output).ok_or(anyhow!(
+                "UiPreviewImage::ui preview_frame: Invalid current output key"
+            ))?;
 
             if output_diff_frame {
                 None
@@ -51,42 +60,62 @@ impl UiPreviewImage {
                         let image_size = Vec2::from([image.width() as f32, image.height() as f32]);
 
                         if !pv.any_input_focused() && !pv.frame_promise.is_locked() {
-                            Self::handle_move_inputs(pv, ui, &image_size, zoom_delta, scroll_delta);
-                            Self::handle_keypresses(pv, frame, ui);
+                            let mut res = Self::handle_move_inputs(
+                                pv,
+                                ui,
+                                &image_size,
+                                zoom_delta,
+                                scroll_delta,
+                            );
+                            pv.add_error("preview", res);
+
+                            res = Self::handle_keypresses(pv, frame, ui);
+                            pv.add_error("preview", res);
                         }
                     }
                 };
             }
 
-            if !painted_image {
+            if !painted_image && pv.errors.is_empty() {
                 ui.add(egui::Spinner::new().size(200.0));
             }
         });
+
+        Ok(())
     }
 
-    pub fn handle_keypresses(pv: &mut VSPreviewer, frame: &epi::Frame, ui: &mut egui::Ui) {
-        let mut rerender = Self::check_update_seek(pv, ui);
-        rerender |= Self::check_update_output(pv, ui);
+    pub fn handle_keypresses(
+        pv: &mut VSPreviewer,
+        frame: &epi::Frame,
+        ui: &mut egui::Ui,
+    ) -> Result<()> {
+        let mut rerender = Self::check_update_seek(pv, ui)?;
+        rerender |= Self::check_update_output(pv, ui)?;
 
         if ui.input().key_pressed(Key::S) {
-            pv.save_screenshot();
+            pv.save_screenshot()?;
         }
 
-        pv.rerender = rerender;
+        pv.rerender |= rerender;
 
         if ui.input().key_pressed(Key::R) {
             pv.reload(frame.clone())
         }
+
+        Ok(())
     }
 
     /// Returns whether to rerender
-    pub fn check_update_seek(pv: &mut VSPreviewer, ui: &mut egui::Ui) -> bool {
+    pub fn check_update_seek(pv: &mut VSPreviewer, ui: &mut egui::Ui) -> Result<bool> {
         // Must not have modifiers
         if !ui.input().modifiers.is_none() {
-            return false;
+            return Ok(false);
         }
 
-        let output = pv.outputs.get_mut(&pv.state.cur_output).unwrap();
+        let output = pv
+            .outputs
+            .get_mut(&pv.state.cur_output)
+            .ok_or(anyhow!("check_update_seek: Invalid current output key"))?;
         let node_info = &output.vsoutput.node_info;
 
         let current = pv.state.cur_frame_no;
@@ -128,13 +157,13 @@ impl UiPreviewImage {
 
         pv.state.cur_frame_no = pv.state.cur_frame_no.clamp(0, node_info.num_frames - 1);
 
-        res
+        Ok(res)
     }
 
-    pub fn check_update_output(pv: &mut VSPreviewer, ui: &mut egui::Ui) -> bool {
+    pub fn check_update_output(pv: &mut VSPreviewer, ui: &mut egui::Ui) -> Result<bool> {
         // Must not have modifiers
         if !ui.input().modifiers.is_none() {
-            return false;
+            return Ok(false);
         }
 
         let old_output = pv.state.cur_output;
@@ -169,7 +198,7 @@ impl UiPreviewImage {
             // Changed output
             pv.output_needs_rerender(old_output)
         } else {
-            false
+            Ok(false)
         }
     }
 
@@ -180,7 +209,7 @@ impl UiPreviewImage {
         size: &Vec2,
         zoom_delta: f32,
         scroll_delta: Vec2,
-    ) {
+    ) -> Result<()> {
         // Update zoom delta to take into consideration small step keyboard input
         let mut delta = zoom_delta;
         let small_step = delta == 1.0
@@ -274,7 +303,7 @@ impl UiPreviewImage {
 
         // NOTE: We are outside the scroll_delta condition
         // Because we want to modify the translations on zoom as well
-        let reprocess_translate = pv.correct_translate_for_current_output(new_translate, false);
+        let reprocess_translate = pv.correct_translate_for_current_output(new_translate, false)?;
 
         let res = res_zoom || (res_scroll && reprocess_translate);
 
@@ -284,5 +313,7 @@ impl UiPreviewImage {
         }
 
         pv.rerender |= res;
+
+        Ok(())
     }
 }

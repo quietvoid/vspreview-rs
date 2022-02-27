@@ -15,7 +15,8 @@ impl UiStateWindow {
                 ui.separator();
 
                 if has_current_output {
-                    UiFrameProps::ui(pv, frame, ui);
+                    let res = UiFrameProps::ui(pv, frame, ui);
+                    pv.add_error("preview", res);
                 }
 
                 UiPreferences::ui(pv, ui);

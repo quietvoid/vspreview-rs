@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use anyhow::{anyhow, bail, Result};
 use eframe::egui::Key;
 use eframe::{egui, epi};
 use fast_image_resize as fir;
@@ -17,7 +18,7 @@ pub struct VSPreviewer {
     pub state: PreviewState,
 
     /// Promise returning the newly reloaded outputs
-    pub reload_data: Option<Promise<HashMap<i32, VSOutput>>>,
+    pub reload_data: Option<ReloadPromise>,
     /// Outputs available from the script
     pub outputs: HashMap<i32, PreviewOutput>,
     /// Last output used
@@ -37,6 +38,8 @@ pub struct VSPreviewer {
     pub frame_promise: Arc<Mutex<Option<FramePromise>>>,
     /// Promise returning the original props of the current frame
     pub original_props_promise: Arc<Mutex<Option<PropsPromise>>>,
+
+    pub errors: HashMap<&'static str, Vec<String>>,
 }
 
 impl VSPreviewer {
@@ -44,7 +47,7 @@ impl VSPreviewer {
         orig: &DynamicImage,
         state: &PreviewState,
         win_size: &eframe::epaint::Vec2,
-    ) -> DynamicImage {
+    ) -> Result<DynamicImage> {
         // Rounded up
         let win_size = win_size.round();
         let src_size = Vec2::from([orig.width() as f32, orig.height() as f32]);
@@ -56,8 +59,6 @@ impl VSPreviewer {
         let zoom_factor = state.zoom_factor;
         let (mut w, mut h) = (src_w as f32, src_h as f32);
 
-        println!("Processing image");
-
         // Unzoom first and foremost
         if zoom_factor < 1.0 && !state.upscale_to_window {
             w *= zoom_factor;
@@ -68,7 +69,7 @@ impl VSPreviewer {
                 w.round() as u32,
                 h.round() as u32,
                 fir::FilterType::Box,
-            );
+            )?;
         }
 
         if w > win_size.x || h > win_size.y || zoom_factor > 1.0 {
@@ -127,7 +128,7 @@ impl VSPreviewer {
                 target_size.x.round() as u32,
                 target_size.y.round() as u32,
                 fir::FilterType::Box,
-            );
+            )?;
         }
 
         // Upscale small images
@@ -140,11 +141,11 @@ impl VSPreviewer {
 
             if orig_size != target_size {
                 let fr_filter = fir::FilterType::from(&state.upsampling_filter);
-                img = resize_fast(img, target_size.x as u32, target_size.y as u32, fr_filter);
+                img = resize_fast(img, target_size.x as u32, target_size.y as u32, fr_filter)?;
             }
         }
 
-        img
+        Ok(img)
     }
 
     // Always reloads the script
@@ -155,22 +156,35 @@ impl VSPreviewer {
             "initialization/reload",
             move || {
                 let mut script_mutex = script.lock();
-                script_mutex.reload();
+                let res = script_mutex.reload();
+                script_mutex.add_vs_error(&res);
 
-                let outputs = script_mutex.get_outputs();
-                assert!(!outputs.is_empty());
+                if res.is_ok() {
+                    let outputs_res = script_mutex.get_outputs();
+                    script_mutex.add_vs_error(&outputs_res);
 
-                // Not ready but we need to get the checker going
-                frame.request_repaint();
+                    let outputs = if let Ok(outputs) = outputs_res {
+                        // No output case handled by vapoursynth-rs
+                        assert!(!outputs.is_empty());
+                        Some(outputs)
+                    } else {
+                        None
+                    };
 
-                outputs
+                    // Not ready but we need to get the checker going
+                    frame.request_repaint();
+
+                    outputs
+                } else {
+                    None
+                }
             },
         ));
     }
 
-    pub fn check_reload_finish(&mut self) {
+    pub fn check_reload_finish(&mut self) -> Result<()> {
         if let Some(promise) = &self.reload_data {
-            if let Some(outputs) = promise.ready() {
+            if let Some(Some(outputs)) = promise.ready() {
                 self.outputs = outputs
                     .iter()
                     .map(|(key, o)| {
@@ -188,10 +202,14 @@ impl VSPreviewer {
                     let mut keys: Vec<&i32> = self.outputs.keys().collect();
                     keys.sort();
 
-                    self.state.cur_output = **keys.first().unwrap();
+                    self.state.cur_output =
+                        **keys.first().ok_or(anyhow!("No outputs available"))?;
                 }
 
-                let output = self.outputs.get_mut(&self.state.cur_output).unwrap();
+                let output = self
+                    .outputs
+                    .get_mut(&self.state.cur_output)
+                    .ok_or(anyhow!("outputs reload: Invalid current output key"))?;
                 let node_info = &output.vsoutput.node_info;
 
                 self.reload_data = None;
@@ -205,11 +223,16 @@ impl VSPreviewer {
                 self.rerender = true;
             }
         }
+
+        Ok(())
     }
 
-    pub fn try_rerender(&mut self, frame: &epi::Frame) {
+    pub fn try_rerender(&mut self, frame: &epi::Frame) -> Result<()> {
         if !self.outputs.is_empty() {
-            let output = self.outputs.get_mut(&self.state.cur_output).unwrap();
+            let output = self
+                .outputs
+                .get_mut(&self.state.cur_output)
+                .ok_or(anyhow!("rerender: Invalid current output key"))?;
 
             if output.force_reprocess {
                 self.rerender = true;
@@ -230,7 +253,7 @@ impl VSPreviewer {
             if let Some(mut promise) = self.frame_promise.try_lock() {
                 // Still rendering
                 if promise.is_some() {
-                    return;
+                    return Ok(());
                 }
 
                 self.rerender = false;
@@ -238,20 +261,20 @@ impl VSPreviewer {
                 let reprocess = self.reprocess;
                 self.reprocess = false;
 
-                let script = self.script.clone();
-                let win_size = self.available_size;
-
-                let pf = if reprocess {
-                    self.get_current_frame()
-                } else {
-                    None
-                };
-
                 // Get current state at the moment the frame is requested
                 let state = self.state;
 
                 // Reset current changed flag
                 self.state.translate_changed = false;
+
+                let script = self.script.clone();
+                let win_size = self.available_size;
+
+                let pf = if reprocess {
+                    self.get_current_frame()?
+                } else {
+                    None
+                };
 
                 let frame = frame.clone();
                 let frame_mutex = self.frame_promise.clone();
@@ -259,7 +282,7 @@ impl VSPreviewer {
                 *promise = Some(poll_promise::Promise::spawn_thread(
                     "fetch_frame",
                     move || {
-                        Self::get_preview_image(
+                        match Self::get_preview_image(
                             frame,
                             frame_mutex,
                             script,
@@ -267,24 +290,35 @@ impl VSPreviewer {
                             pf,
                             reprocess,
                             win_size,
-                        )
+                        ) {
+                            Ok(preview_frame) => preview_frame,
+                            Err(e) => {
+                                // Errors here are not recoverable
+                                panic!("{}", e)
+                            }
+                        }
                     },
                 ));
             }
         }
+
+        Ok(())
     }
 
-    pub fn check_rerender_finish(&mut self, ctx: &egui::Context) {
+    pub fn check_rerender_finish(&mut self, ctx: &egui::Context) -> Result<()> {
         if let Some(mut promise_mutex) = self.frame_promise.try_lock() {
             let mut updated_tex = false;
 
             if let Some(promise) = &*promise_mutex {
-                if let Some(rendered_frame) = promise.ready() {
+                if let Some(Some(rendered_frame)) = promise.ready() {
                     // Block as it's supposed to be ready
                     let pf = rendered_frame.read();
 
                     if let Some(mut tex_mutex) = pf.texture.try_lock() {
-                        let output = self.outputs.get_mut(&self.state.cur_output).unwrap();
+                        let output = self
+                            .outputs
+                            .get_mut(&self.state.cur_output)
+                            .ok_or(anyhow!("current_output_mut: Invalid current output key"))?;
 
                         // Set PreviewFrame from what the promise returned
                         output.rendered_frame = Some(rendered_frame.clone());
@@ -313,14 +347,19 @@ impl VSPreviewer {
                 *promise_mutex = None;
             }
         }
+
+        Ok(())
     }
 
-    pub fn get_current_frame(&self) -> Option<VSPreviewFrame> {
+    pub fn get_current_frame(&self) -> Result<Option<VSPreviewFrame>> {
         if !self.outputs.is_empty() {
-            let output = self.outputs.get(&self.state.cur_output).unwrap();
-            output.rendered_frame.clone()
+            let output = self
+                .outputs
+                .get(&self.state.cur_output)
+                .ok_or(anyhow!("get_current_Frame: Invalid current output key"))?;
+            Ok(output.rendered_frame.clone())
         } else {
-            None
+            Ok(None)
         }
     }
 
@@ -332,7 +371,7 @@ impl VSPreviewer {
         pf: Option<VSPreviewFrame>,
         reprocess: bool,
         win_size: Vec2,
-    ) -> VSPreviewFrame {
+    ) -> Result<Option<VSPreviewFrame>> {
         // This is fine because only one promise may be executing at a time
         let mut script_mutex = script.lock();
 
@@ -342,6 +381,7 @@ impl VSPreviewer {
 
         // Reuse existing image, process and recreate texture
         let pf = if reprocess && have_existing_frame {
+            // Verified above, cannot panic
             let pf = pf.unwrap();
 
             // Force blocking as we need to reprocess the image
@@ -352,53 +392,59 @@ impl VSPreviewer {
             if Self::state_needs_processing(&state, &image_size, &win_size) {
                 // Reprocess and update image for painting
                 existing_frame.processed_image =
-                    Some(Self::process_image(image, &state, &win_size));
+                    Some(Self::process_image(image, &state, &win_size)?);
             } else {
                 existing_frame.processed_image = None;
             }
 
-            pf.clone()
+            Some(pf.clone())
         } else {
             // Request new frame, process and recreate image for painting
-            let vsframe = script_mutex
-                .get_frame(
-                    state.cur_output,
-                    state.cur_frame_no,
-                    &state.frame_transform_opts,
-                )
-                .unwrap();
+            let vsframe_res = script_mutex.get_frame(
+                state.cur_output,
+                state.cur_frame_no,
+                &state.frame_transform_opts,
+            );
+            script_mutex.add_vs_error(&vsframe_res);
 
-            let image_size =
-                Vec2::from([vsframe.image.width() as f32, vsframe.image.height() as f32]);
+            if let Ok(vsframe) = vsframe_res {
+                let image_size =
+                    Vec2::from([vsframe.image.width() as f32, vsframe.image.height() as f32]);
 
-            let processed_image = if Self::state_needs_processing(&state, &image_size, &win_size) {
-                Some(Self::process_image(&vsframe.image, &state, &win_size))
+                let processed_image =
+                    if Self::state_needs_processing(&state, &image_size, &win_size) {
+                        Some(Self::process_image(&vsframe.image, &state, &win_size)?)
+                    } else {
+                        None
+                    };
+
+                let new_pf = if let Some(existing_frame) = pf {
+                    let mut pf = existing_frame.write();
+                    pf.vsframe = vsframe;
+                    pf.processed_image = processed_image;
+
+                    existing_frame.clone()
+                } else {
+                    Arc::new(RwLock::new(PreviewFrame {
+                        vsframe,
+                        processed_image,
+                        texture: Mutex::new(None),
+                    }))
+                };
+
+                Some(new_pf)
             } else {
-                None
-            };
-
-            if let Some(existing_frame) = pf {
-                let mut pf = existing_frame.write();
-                pf.vsframe = vsframe;
-                pf.processed_image = processed_image;
-
-                existing_frame.clone()
-            } else {
-                Arc::new(RwLock::new(PreviewFrame {
-                    vsframe,
-                    processed_image,
-                    texture: Mutex::new(None),
-                }))
+                pf
             }
         };
 
         // Once frame is ready
         frame.request_repaint();
 
-        pf
+        Ok(pf)
     }
 
-    pub fn save_screenshot(&self) {
+    pub fn save_screenshot(&self) -> Result<()> {
         if let Some(script) = self.script.try_lock() {
             let mut save_path = script.get_script_dir();
 
@@ -408,22 +454,30 @@ impl VSPreviewer {
             );
             save_path.push(screen_file);
 
-            let output = self.outputs.get(&self.state.cur_output).unwrap();
+            let output = self
+                .outputs
+                .get(&self.state.cur_output)
+                .ok_or(anyhow!("save_screenshot: Invalid current output key"))?;
             if let Some(pf) = &output.rendered_frame {
                 let pf = pf.read();
 
+                // Shouldn't fail at this point
                 pf.vsframe
                     .image
-                    .save_with_format(&save_path, image::ImageFormat::Png)
-                    .unwrap();
+                    .save_with_format(&save_path, image::ImageFormat::Png)?;
             } else {
-                println!("Apparently there are no frames for the current output");
+                bail!("There is no rendered frame for the current output");
             }
 
-            println!("Screenshot saved to {}", &save_path.to_str().unwrap());
+            let path_str = save_path
+                .to_str()
+                .ok_or(anyhow!("Invalid UTF-8 save path"))?;
+            println!("Screenshot saved to {}", path_str);
         } else {
-            println!("Apparently the script is busy rendering a frame, try again later");
+            bail!("The script is busy rendering a frame, try again later");
         }
+
+        Ok(())
     }
 
     // Returns fixed pixel based and normalized translation vectors
@@ -467,9 +521,15 @@ impl VSPreviewer {
     // Only called when the output changes
     // Update zoom/translate for the new output
     // Returns if we need to rerender
-    pub fn output_needs_rerender(&mut self, old_output: i32) -> bool {
-        let old = self.outputs.get(&old_output).unwrap();
-        let new = self.outputs.get(&self.state.cur_output).unwrap();
+    pub fn output_needs_rerender(&mut self, old_output: i32) -> Result<bool> {
+        let old = self
+            .outputs
+            .get(&old_output)
+            .ok_or(anyhow!("output_needs_rerender: Invalid new output key"))?;
+        let new = self
+            .outputs
+            .get(&self.state.cur_output)
+            .ok_or(anyhow!("output_needs_rerender: Invalid current output key"))?;
 
         let old_node = &old.vsoutput.node_info;
         let old_size = Vec2::from([old_node.width as f32, old_node.height as f32]);
@@ -499,7 +559,7 @@ impl VSPreviewer {
             self.state.zoom_factor,
         );
 
-        old.last_frame_no != new.last_frame_no
+        Ok(old.last_frame_no != new.last_frame_no)
     }
 
     // Returns if the translate changed and we need to reprocess
@@ -507,13 +567,15 @@ impl VSPreviewer {
         &mut self,
         new_translate: Vec2,
         normalized: bool,
-    ) -> bool {
+    ) -> Result<bool> {
         if self.outputs.is_empty() {
-            return false;
+            return Ok(false);
         }
 
         let info = {
-            let output = self.outputs.get(&self.state.cur_output).unwrap();
+            let output = self.outputs.get(&self.state.cur_output).ok_or(anyhow!(
+                "correct_translate_for_current_output: Invalid current output key"
+            ))?;
             output.vsoutput.node_info.clone()
         };
 
@@ -541,9 +603,9 @@ impl VSPreviewer {
 
             self.reprocess_outputs();
 
-            true
+            Ok(true)
         } else {
-            false
+            Ok(false)
         }
     }
 
@@ -569,13 +631,19 @@ impl VSPreviewer {
             let props_mutex = self.frame_promise.clone();
 
             let promise = poll_promise::Promise::spawn_thread("fetch_original_props", move || {
-                if let Some(mut mutex) = script.try_lock() {
+                if let Some(mut script_mutex) = script.try_lock() {
                     let _lock = props_mutex.lock();
 
-                    let props = mutex.get_original_props(cur_output, cur_frame_no);
-                    frame.request_repaint();
+                    let props_res = script_mutex.get_original_props(cur_output, cur_frame_no);
+                    script_mutex.add_vs_error(&props_res);
 
-                    props
+                    if let Ok(props) = props_res {
+                        frame.request_repaint();
+
+                        Some(props)
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 }
@@ -585,17 +653,21 @@ impl VSPreviewer {
         }
     }
 
-    pub fn check_original_props_finish(&mut self) {
+    pub fn check_original_props_finish(&mut self) -> Result<()> {
         if let Some(mut mutex) = self.original_props_promise.try_lock() {
             if let Some(promise) = &*mutex {
                 if let Some(props) = promise.ready() {
-                    let output = self.outputs.get_mut(&self.state.cur_output).unwrap();
+                    let output = self.outputs.get_mut(&self.state.cur_output).ok_or(anyhow!(
+                        "check_original_props_finish: Invalid current output key"
+                    ))?;
                     output.original_props = *props;
 
                     *mutex = None;
                 }
             };
         }
+
+        Ok(())
     }
 
     pub fn check_misc_keyboard_inputs(&mut self, frame: &epi::Frame, ui: &mut egui::Ui) {
@@ -624,16 +696,63 @@ impl VSPreviewer {
         image_size: &Vec2,
         win_size: &Vec2,
     ) -> bool {
-        if state.upscale_to_window {
+        if state.upscale_to_window
+            && state.zoom_factor == 1.0
+            && !state.translate_changed
+            && state.translate_norm.length() <= 0.0
+        {
+            // Pure upscale
             // Scaled size to window bounds
             let target_size = dimensions_for_window(win_size, image_size).round();
 
             // Needs to be scaled up
             image_size.length() < target_size.length()
         } else {
+            // Any other processing needed
             state.zoom_factor != 1.0
                 || state.translate_norm.length() > 0.0
                 || state.translate_changed
+        }
+    }
+
+    pub fn check_promise_callbacks(
+        &mut self,
+        ctx: &egui::Context,
+        frame: &epi::Frame,
+    ) -> Result<()> {
+        // Initial callback
+        self.check_reload_finish()?;
+
+        // Poll new requested frame, replace old if ready
+        self.check_rerender_finish(ctx)?;
+
+        // Check for original props if requested
+        self.check_original_props_finish()?;
+
+        // We want a new frame
+        // Previously rendering frames must have completed to request a new one
+        self.try_rerender(frame)?;
+
+        Ok(())
+    }
+
+    pub fn add_error<T>(&mut self, key: &'static str, res: Result<T>) {
+        if let Err(e) = res {
+            if let Some(list) = self.errors.get_mut(key) {
+                list.push(e.to_string());
+            } else {
+                self.errors.insert(key, vec![e.to_string()]);
+            }
+        }
+    }
+
+    pub fn add_errors(&mut self, key: &'static str, errors: &[String]) {
+        if !errors.is_empty() {
+            if let Some(list) = self.errors.get_mut(key) {
+                list.extend(errors.iter().cloned());
+            } else {
+                self.errors.insert(key, errors.to_owned());
+            }
         }
     }
 }

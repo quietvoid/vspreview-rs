@@ -1,5 +1,8 @@
 # vspreview-rs
 Minimal and functional VapourSynth script previewer  
+Built on top of [egui](https://github.com/emilk/egui) and [vapoursynth-rs](https://github.com/YaLTeR/vapoursynth-rs)  
+
+&nbsp;
 
 ### Dependencies
 See [eframe](https://github.com/emilk/egui/tree/master/eframe) dependencies.

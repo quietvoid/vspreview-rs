@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use eframe::{egui, epaint::Vec2};
 use image::DynamicImage;
@@ -26,8 +26,9 @@ pub const MIN_ZOOM: f32 = 0.125;
 pub const MAX_ZOOM: f32 = 64.0;
 
 type VSPreviewFrame = Arc<RwLock<PreviewFrame>>;
-type FramePromise = Promise<VSPreviewFrame>;
+type FramePromise = Promise<Option<VSPreviewFrame>>;
 type PropsPromise = Promise<Option<VSFrameProps>>;
+type ReloadPromise = Promise<Option<HashMap<i32, VSOutput>>>;
 
 /// TODO:
 ///   - Canvas background color
@@ -42,7 +43,9 @@ pub struct PreviewState {
 
     pub zoom_factor: f32,
 
+    #[serde(skip)]
     pub translate_changed: bool,
+
     pub translate: Vec2,
     pub translate_norm: Vec2,
 

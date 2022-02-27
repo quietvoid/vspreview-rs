@@ -51,22 +51,9 @@ impl epi::App for VSPreviewer {
     }
 
     fn update(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
-        let cur_output = self.state.cur_output;
+        let promise_res = self.check_promise_callbacks(ctx, frame);
+        self.add_error("callbacks", promise_res);
 
-        // Initial callback
-        self.check_reload_finish();
-
-        // Poll new requested frame, replace old if ready
-        self.check_rerender_finish(ctx);
-
-        // Check for original props if requested
-        self.check_original_props_finish();
-
-        // We want a new frame
-        // Previously rendering frames must have completed to request a new one
-        self.try_rerender(frame);
-
-        let has_current_output = !self.outputs.is_empty() && self.outputs.contains_key(&cur_output);
         let panel_frame = Frame::default()
             .fill(Color32::from_gray(51))
             .margin(Margin::same(self.state.canvas_margin))
@@ -84,21 +71,11 @@ impl epi::App for VSPreviewer {
                     self.reprocess_outputs();
                 }
 
-                // Draw window on top
-                if self.state.show_gui {
-                    UiStateWindow::ui(self, ctx, frame);
-                }
+                let preview_res = PreviewerMainUi::ui(self, ctx, frame, ui);
+                self.add_error("preview", preview_res);
 
-                // Centered image painted on
-                UiPreviewImage::ui(self, frame, ui);
-
-                // Bottom panel
-                if self.state.show_gui && has_current_output {
-                    UiBottomPanel::ui(self, ctx);
-                }
-
-                // Check at the end of frame for reprocessing
-                self.try_rerender(frame);
+                // Display errors if any
+                ErrorWindowUi::ui(self, ctx);
             });
     }
 

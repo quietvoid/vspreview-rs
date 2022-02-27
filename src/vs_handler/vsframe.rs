@@ -146,13 +146,13 @@ impl MdcvMetadata {
         let lum_min = map.get_float(KEY_MDCV_LUM_MIN).ok()?;
         let lum_max = map.get_float(KEY_MDCV_LUM_MAX).ok()?;
 
-        let primaries_x = map.get_float_array(KEY_MDCV_PRIM_X).unwrap();
+        let primaries_x = map.get_float_array(KEY_MDCV_PRIM_X).ok()?;
         assert!(primaries_x.len() == 3);
-        let primaries_y = map.get_float_array(KEY_MDCV_PRIM_Y).unwrap();
+        let primaries_y = map.get_float_array(KEY_MDCV_PRIM_Y).ok()?;
         assert!(primaries_x.len() == 3);
 
-        let wp_x = map.get_float(KEY_MDCV_WP_X).unwrap();
-        let wp_y = map.get_float(KEY_MDCV_WP_Y).unwrap();
+        let wp_x = map.get_float(KEY_MDCV_WP_X).ok()?;
+        let wp_y = map.get_float(KEY_MDCV_WP_Y).ok()?;
 
         let meta = MdcvMetadata {
             lum_min,
