@@ -51,7 +51,13 @@ impl PreviewedScript {
     }
 
     pub fn reload(&mut self) -> Result<()> {
-        let env = self.env.get_or_insert(Environment::new()?);
+        let env = if let Some(env) = self.env.as_mut() {
+            env.clear();
+
+            env
+        } else {
+            self.env.get_or_insert(Environment::new()?)
+        };
 
         env.eval_file(&self.script_file, EvalFlags::SetWorkingDir)?;
 

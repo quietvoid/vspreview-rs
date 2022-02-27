@@ -62,7 +62,7 @@ impl epi::App for VSPreviewer {
         egui::CentralPanel::default()
             .frame(panel_frame)
             .show(ctx, |ui| {
-                // Check for quit, GUI toggle, etc.
+                // Check for quit, GUI toggle, reload, etc.
                 self.check_misc_keyboard_inputs(frame, ui);
 
                 // React on canvas resolution change

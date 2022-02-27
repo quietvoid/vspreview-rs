@@ -38,7 +38,7 @@ impl PreviewerMainUi {
         }
 
         // Centered image painted on
-        UiPreviewImage::ui(pv, frame, ui)?;
+        UiPreviewImage::ui(pv, ui)?;
 
         // Bottom panel
         if pv.state.show_gui && has_current_output {

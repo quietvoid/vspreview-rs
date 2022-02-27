@@ -1,10 +1,10 @@
-use super::{egui, egui::Key, epaint::Vec2, epi, VSPreviewer, MAX_ZOOM, MIN_ZOOM};
+use super::{egui, egui::Key, epaint::Vec2, VSPreviewer, MAX_ZOOM, MIN_ZOOM};
 use anyhow::{anyhow, Result};
 
 pub struct UiPreviewImage {}
 
 impl UiPreviewImage {
-    pub fn ui(pv: &mut VSPreviewer, frame: &epi::Frame, ui: &mut egui::Ui) -> Result<()> {
+    pub fn ui(pv: &mut VSPreviewer, ui: &mut egui::Ui) -> Result<()> {
         let cur_output = pv.state.cur_output;
         let has_current_output = !pv.outputs.is_empty() && pv.outputs.contains_key(&cur_output);
 
@@ -69,7 +69,7 @@ impl UiPreviewImage {
                             );
                             pv.add_error("preview", res);
 
-                            res = Self::handle_keypresses(pv, frame, ui);
+                            res = Self::handle_keypresses(pv, ui);
                             pv.add_error("preview", res);
                         }
                     }
@@ -84,11 +84,7 @@ impl UiPreviewImage {
         Ok(())
     }
 
-    pub fn handle_keypresses(
-        pv: &mut VSPreviewer,
-        frame: &epi::Frame,
-        ui: &mut egui::Ui,
-    ) -> Result<()> {
+    pub fn handle_keypresses(pv: &mut VSPreviewer, ui: &mut egui::Ui) -> Result<()> {
         let mut rerender = Self::check_update_seek(pv, ui)?;
         rerender |= Self::check_update_output(pv, ui)?;
 
@@ -97,10 +93,6 @@ impl UiPreviewImage {
         }
 
         pv.rerender |= rerender;
-
-        if ui.input().key_pressed(Key::R) {
-            pv.reload(frame.clone())
-        }
 
         Ok(())
     }
