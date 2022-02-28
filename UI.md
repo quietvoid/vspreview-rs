@@ -37,6 +37,7 @@ Original frame props require an extra frame request, so they can be obtained on 
 - **Dithering**: whether to add additionnal dithering when converting.
 - **Upscale to the window**: can be used to upscale the frame to fit in the window.
     - Useful when the clip is lower resolution than the window.
+- **Fit image to the window**: Downscale the image to fit within the window width.
 - **Zoom multiplier**: Multiplies the zoom factor by this value instead of incrementing by 1.0.
 - **Scroll multiplier**: Mutliplies the pixels translated on wheel scroll.
     - Can be used to translate faster or slower.
