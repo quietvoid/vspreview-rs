@@ -1,9 +1,9 @@
 use super::{egui, VSPreviewer};
 use eframe::egui::{RichText, Ui};
 
-pub struct ErrorWindowUi {}
+pub struct MessageWindowUi {}
 
-impl ErrorWindowUi {
+impl MessageWindowUi {
     pub fn ui(pv: &mut VSPreviewer, ctx: &egui::Context) {
         let mut vs_messages = None;
 
@@ -27,7 +27,7 @@ impl ErrorWindowUi {
         }
 
         if !pv.errors.is_empty() {
-            egui::Window::new(RichText::new("Some errors occurred!").size(20.0))
+            egui::Window::new(RichText::new("Messages").size(20.0))
                 .resizable(true)
                 .collapsible(false)
                 .default_pos((pv.available_size.x / 2.0, pv.available_size.y / 2.0))
@@ -52,7 +52,7 @@ impl ErrorWindowUi {
 
                     ui.vertical_centered(|ui| {
                         if ui
-                            .button(RichText::new("Okay, clear errors").size(22.0))
+                            .button(RichText::new("Okay, clear messages").size(22.0))
                             .on_hover_text(
                                 RichText::new("The previewer may not end up in a useable state!")
                                     .size(18.0),

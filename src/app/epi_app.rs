@@ -80,7 +80,7 @@ impl epi::App for VSPreviewer {
                 self.add_error("preview", preview_res);
 
                 // Display errors if any
-                ErrorWindowUi::ui(self, ctx);
+                MessageWindowUi::ui(self, ctx);
             });
     }
 

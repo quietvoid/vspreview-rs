@@ -4,8 +4,8 @@ use eframe::{egui, epaint, epi};
 
 mod bottom_panel;
 mod controls;
-mod error_window;
 mod frame_props;
+mod message_window;
 mod preferences;
 mod preview_image;
 mod state_window;
@@ -14,8 +14,8 @@ mod custom_widgets;
 
 pub use bottom_panel::UiBottomPanel;
 use controls::UiControls;
-pub use error_window::ErrorWindowUi;
 use frame_props::UiFrameProps;
+pub use message_window::MessageWindowUi;
 use preferences::UiPreferences;
 pub use preview_image::UiPreviewImage;
 pub use state_window::UiStateWindow;
