@@ -5,7 +5,8 @@ Built on top of [egui](https://github.com/emilk/egui) and [vapoursynth-rs](https
 &nbsp;
 
 ### Dependencies
-See [eframe](https://github.com/emilk/egui/tree/master/eframe) dependencies.
+Requires a VapourSynth installation with support for API 3.6 minimum.  
+For the GUI, see [eframe](https://github.com/emilk/egui/tree/master/eframe) dependencies.  
 
 ### Building
 The minimum Rust version to build `vspreview-rs` is 1.59.0.
