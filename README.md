@@ -1,4 +1,11 @@
 # vspreview-rs
+
+<a href="https://raw.githubusercontent.com/quietvoid/vspreview-rs/main/assets/00demo.jpg">
+    <img src="https://raw.githubusercontent.com/quietvoid/vspreview-rs/main/assets/00demo.jpg" width="600">
+</a>
+
+&nbsp;
+
 Minimal and functional VapourSynth script previewer  
 Built on top of [egui](https://github.com/emilk/egui) and [vapoursynth-rs](https://github.com/YaLTeR/vapoursynth-rs)  
 
