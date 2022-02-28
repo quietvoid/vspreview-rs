@@ -51,3 +51,12 @@ Original frame props require an extra frame request, so they can be obtained on 
 
 Provides a slider to seek through frames, as well as an input box to enter a specific frame.  
 Various informations about the clip.  
+
+&nbsp;
+
+## Error/message window
+
+![Error window](/assets/04logs.jpg?raw=true "Error window")
+
+Provides info about the different messages from VapourSynth, and fatal errors.  
+Cleared on reload or window close.  

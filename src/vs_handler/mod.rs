@@ -1,7 +1,10 @@
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Result};
+use vapoursynth::api::MessageHandlerId;
 use vapoursynth::prelude::*;
 
 use crate::utils::frame_to_dynimage;
@@ -23,13 +26,22 @@ pub struct PreviewedScript {
     #[serde(skip)]
     env: Option<Environment>,
     #[serde(skip)]
-    pub vs_error: Option<Vec<String>>,
+    message_handler_id: Option<MessageHandlerId>,
+
+    #[serde(skip)]
+    pub vs_messages: Arc<Mutex<Vec<VSMessage>>>,
 }
 
 #[derive(Default, Clone, Debug)]
 pub struct VSOutput {
     pub index: i32,
     pub node_info: VSNode,
+}
+
+#[derive(Clone, Debug)]
+pub struct VSMessage {
+    pub message_type: MessageType,
+    pub message: String,
 }
 
 impl PreviewedScript {
@@ -46,7 +58,8 @@ impl PreviewedScript {
             script_file,
             script_dir,
             env: None,
-            vs_error: None,
+            message_handler_id: None,
+            vs_messages: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -58,6 +71,23 @@ impl PreviewedScript {
         } else {
             self.env.get_or_insert(Environment::new()?)
         };
+
+        if self.message_handler_id.is_none() {
+            let api = API::get().ok_or(anyhow!("Couldn't retrieve API object"))?;
+
+            let vserrors = self.vs_messages.clone();
+            let id = api.add_message_handler(move |message_type, message| {
+                let message = message.to_str().unwrap().to_string();
+
+                let mut errors = vserrors.lock();
+                errors.push(VSMessage {
+                    message_type,
+                    message,
+                });
+            });
+
+            self.message_handler_id = Some(id);
+        }
 
         env.eval_file(&self.script_file, EvalFlags::SetWorkingDir)?;
 
@@ -179,8 +209,21 @@ impl PreviewedScript {
 
     pub fn add_vs_error<T>(&mut self, res: &Result<T>) {
         if let Err(e) = res {
-            let errors = self.vs_error.get_or_insert(Vec::new());
-            errors.push(format!("{:?}", e));
+            let mut messages = self.vs_messages.lock();
+
+            messages.push(VSMessage {
+                message_type: MessageType::Fatal,
+                message: format!("{:?}", e),
+            });
+        }
+    }
+}
+
+impl Drop for PreviewedScript {
+    fn drop(&mut self) {
+        if let Some(handler_id) = self.message_handler_id {
+            let api = API::get().unwrap();
+            api.remove_message_handler(handler_id);
         }
     }
 }

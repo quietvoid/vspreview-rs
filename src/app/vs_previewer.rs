@@ -153,7 +153,15 @@ impl VSPreviewer {
 
     // Always reloads the script
     pub fn reload(&mut self, frame: epi::Frame) {
+        if self.reload_data.is_some() {
+            return;
+        }
+
         let script = self.script.clone();
+
+        if !self.errors.is_empty() {
+            self.errors.clear();
+        }
 
         self.reload_data = Some(poll_promise::Promise::spawn_thread(
             "initialization/reload",
@@ -187,43 +195,50 @@ impl VSPreviewer {
 
     pub fn check_reload_finish(&mut self) -> Result<()> {
         if let Some(promise) = &self.reload_data {
-            if let Some(Some(outputs)) = promise.ready() {
-                self.outputs = outputs
-                    .iter()
-                    .map(|(key, o)| {
-                        let new = PreviewOutput {
-                            vsoutput: o.clone(),
-                            ..Default::default()
-                        };
+            if let Some(promise_res) = promise.ready() {
+                self.outputs.clear();
 
-                        (*key, new)
-                    })
-                    .collect();
+                if let Some(outputs) = promise_res {
+                    self.outputs = outputs
+                        .iter()
+                        .map(|(key, o)| {
+                            let new = PreviewOutput {
+                                vsoutput: o.clone(),
+                                ..Default::default()
+                            };
 
-                if !self.outputs.contains_key(&self.state.cur_output) {
-                    // Fallback to first output in order
-                    let mut keys: Vec<&i32> = self.outputs.keys().collect();
-                    keys.sort();
+                            (*key, new)
+                        })
+                        .collect();
 
-                    self.state.cur_output =
-                        **keys.first().ok_or(anyhow!("No outputs available"))?;
+                    if !self.outputs.contains_key(&self.state.cur_output) {
+                        // Fallback to first output in order
+                        let mut keys: Vec<&i32> = self.outputs.keys().collect();
+                        keys.sort();
+
+                        self.state.cur_output =
+                            **keys.first().ok_or(anyhow!("No outputs available"))?;
+                    }
+
+                    let output = self
+                        .outputs
+                        .get_mut(&self.state.cur_output)
+                        .ok_or(anyhow!("outputs reload: Invalid current output key"))?;
+                    let node_info = &output.vsoutput.node_info;
+
+                    self.reload_data = None;
+                    self.last_output_key = self.state.cur_output;
+
+                    if self.state.cur_frame_no >= node_info.num_frames {
+                        self.state.cur_frame_no = node_info.num_frames - 1;
+                    }
+
+                    // Fetch a frame for new current output
+                    self.rerender = true;
                 }
 
-                let output = self
-                    .outputs
-                    .get_mut(&self.state.cur_output)
-                    .ok_or(anyhow!("outputs reload: Invalid current output key"))?;
-                let node_info = &output.vsoutput.node_info;
-
+                // Reset reload data even if errored
                 self.reload_data = None;
-                self.last_output_key = self.state.cur_output;
-
-                if self.state.cur_frame_no >= node_info.num_frames {
-                    self.state.cur_frame_no = node_info.num_frames - 1;
-                }
-
-                // Fetch a frame for new current output
-                self.rerender = true;
             }
         }
 

@@ -116,7 +116,8 @@ impl UiPreviewImage {
                 };
             }
 
-            if !painted_image && pv.errors.is_empty() {
+            // Show loading when reloading or when no image and errors cleared
+            if pv.reload_data.is_some() || (!painted_image && pv.errors.is_empty()) {
                 ui.add(egui::Spinner::new().size(200.0));
             }
         });

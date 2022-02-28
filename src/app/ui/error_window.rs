@@ -1,60 +1,51 @@
 use super::{egui, VSPreviewer};
-use eframe::egui::RichText;
+use eframe::egui::{RichText, Ui};
 
 pub struct ErrorWindowUi {}
 
 impl ErrorWindowUi {
     pub fn ui(pv: &mut VSPreviewer, ctx: &egui::Context) {
-        let mut vs_errors = None;
-        if let Some(mut script_lock) = pv.script.try_lock() {
-            if let Some(errors) = script_lock.vs_error.as_mut() {
-                if !errors.is_empty() {
-                    vs_errors = Some(errors.clone());
-                    errors.clear();
+        let mut vs_messages = None;
+
+        if let Some(script_lock) = pv.script.try_lock() {
+            if let Some(mut messages) = script_lock.vs_messages.try_lock() {
+                if !messages.is_empty() {
+                    vs_messages = Some(messages.clone());
+                    messages.clear();
                 }
             }
         }
 
-        if let Some(errors) = &vs_errors {
-            pv.add_errors("vapoursynth", errors);
+        if let Some(messages) = &vs_messages {
+            // Keep critical errors to avoid rendering image
+            let mapped: Vec<String> = messages
+                .iter()
+                .map(|e| format!("{:?}: {}", &e.message_type, &e.message))
+                .collect();
+
+            pv.add_errors("vapoursynth", &mapped);
         }
 
         if !pv.errors.is_empty() {
             egui::Window::new(RichText::new("Some errors occurred!").size(20.0))
-                .collapsible(false)
                 .resizable(true)
-                .auto_sized()
-                .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::new(0.0, -300.0))
+                .collapsible(false)
+                .default_pos((pv.available_size.x / 2.0, pv.available_size.y / 2.0))
                 .show(ctx, |ui| {
-                    if let Some(errors) = pv.errors.get("vapoursynth") {
-                        let header = RichText::new("VapourSynth errors").size(20.0);
-                        egui::CollapsingHeader::new(header).show(ui, |ui| {
-                            for (i, e) in errors.iter().enumerate() {
-                                let value = format!("{}. {e}", i + 1);
-                                ui.label(RichText::new(value).size(18.0));
-                            }
-                        });
-                    }
+                    Self::draw_error_section(pv, ui, "vapoursynth", "VapourSynth messages");
 
-                    if let Some(errors) = pv.errors.get("callbacks") {
-                        let header = RichText::new("Error fetching frames or reloading").size(20.0);
-                        egui::CollapsingHeader::new(header).show(ui, |ui| {
-                            for (i, e) in errors.iter().enumerate() {
-                                let value = format!("{}. {e}", i + 1);
-                                ui.label(RichText::new(value).size(18.0));
-                            }
-                        });
-                    }
-
-                    if let Some(errors) = pv.errors.get("preview") {
-                        let header = RichText::new("Error rendering the preview or GUI").size(20.0);
-                        egui::CollapsingHeader::new(header).show(ui, |ui| {
-                            for (i, e) in errors.iter().enumerate() {
-                                let value = format!("{}. {e}", i + 1);
-                                ui.label(RichText::new(value).size(18.0));
-                            }
-                        });
-                    }
+                    Self::draw_error_section(
+                        pv,
+                        ui,
+                        "callbacks",
+                        "Error fetching frames or reloading",
+                    );
+                    Self::draw_error_section(
+                        pv,
+                        ui,
+                        "preview",
+                        "Error rendering the preview or GUI",
+                    );
 
                     ui.separator();
                     ui.add_space(10.0);
@@ -72,6 +63,35 @@ impl ErrorWindowUi {
                         }
                     });
                 });
+        }
+    }
+
+    pub fn draw_error_section(pv: &mut VSPreviewer, ui: &mut Ui, key: &str, header: &str) {
+        if let Some(errors) = pv.errors.get(key) {
+            let header = RichText::new(header).size(20.0);
+            egui::CollapsingHeader::new(header).show(ui, |ui| {
+                for (i, e) in errors.iter().enumerate() {
+                    Self::draw_error_label(ui, format!("{}. {e}", i + 1));
+                }
+            });
+        }
+    }
+
+    pub fn draw_error_label(ui: &mut Ui, value: String) {
+        let max_size = value.len().min(75);
+
+        let final_text = if value.len() > 75 {
+            let trimmed = value[..max_size].replace('\n', " ");
+
+            format!("{} ...", trimmed)
+        } else {
+            value.trim().to_string()
+        };
+
+        let res = ui.label(RichText::new(final_text).size(18.0));
+
+        if value.len() > 75 {
+            res.on_hover_text(RichText::new(value).size(16.0));
         }
     }
 }

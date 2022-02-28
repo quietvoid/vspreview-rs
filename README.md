@@ -26,6 +26,7 @@ Also, frame props are easily accessible.
 Main parts of the UI:
 - A window with the current state, including access to frame props and settings.
 - A bottom panel with a slider to change frame quickly, as well as the clip info.
+- An error window for VapourSynth messages or errors while rendering.
 
 See more from the [UI documentation](UI.md).
 
