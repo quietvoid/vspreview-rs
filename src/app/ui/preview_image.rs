@@ -89,9 +89,10 @@ impl UiPreviewImage {
                             && pv.state.upscale_to_window
                             && pv.state.upsampling_filter == PreviewFilterType::Gpu
                         {
+                            let target_size =
+                                crate::utils::dimensions_for_window(&win_size, &tex_size);
                             // Image smaller than window, upscale
-                            tex_size *= (win_size.x / tex_size.x).max(1.0);
-                            tex_size *= (win_size.y / tex_size.y).max(1.0);
+                            tex_size = target_size;
                         }
 
                         let custom_image = CustomImage::new(tex.id(), tex_size);
