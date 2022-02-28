@@ -1,4 +1,6 @@
-use super::{egui, egui::Key, epaint::Vec2, VSPreviewer, MAX_ZOOM, MIN_ZOOM};
+use super::{
+    custom_widgets::CustomImage, egui, egui::Key, epaint::Vec2, VSPreviewer, MAX_ZOOM, MIN_ZOOM,
+};
 use anyhow::{anyhow, Result};
 
 pub struct UiPreviewImage {}
@@ -45,19 +47,36 @@ impl UiPreviewImage {
 
         let mut painted_image = false;
 
-        ui.centered_and_justified(|ui| {
+        let mut image_size = Vec2::ZERO;
+
+        // We want the image size for alignment
+        if let Some(pf) = &preview_frame {
+            let pf = pf.read();
+
+            let image = &pf.vsframe.image;
+            image_size = Vec2::from([image.width() as f32, image.height() as f32]);
+        }
+
+        let cross_align = if (image_size.x * pv.state.zoom_factor.min(1.0)) > pv.available_size.x {
+            egui::Align::Min
+        } else {
+            egui::Align::Center
+        };
+
+        let canvas_layout = egui::Layout::centered_and_justified(egui::Direction::TopDown)
+            .with_cross_align(cross_align);
+
+        ui.with_layout(canvas_layout, |ui| {
             if let Some(pf) = preview_frame {
                 let pf = pf.read();
-
                 if let Some(tex_mutex) = pf.texture.try_lock() {
                     if let Some(tex) = &*tex_mutex {
                         painted_image = true;
 
                         let tex_size = tex.size_vec2();
-                        ui.image(tex.id(), tex_size);
+                        let custom_image = CustomImage::new(tex.id(), tex_size);
 
-                        let image = &pf.vsframe.image;
-                        let image_size = Vec2::from([image.width() as f32, image.height() as f32]);
+                        ui.add(custom_image);
 
                         if !pv.any_input_focused() && !pv.frame_promise.is_locked() {
                             let mut res = Self::handle_move_inputs(
@@ -301,7 +320,7 @@ impl UiPreviewImage {
 
         // Set other outputs to reprocess if we're modifying the image
         if res {
-            pv.reprocess_outputs();
+            pv.reprocess_outputs(reprocess_translate);
         }
 
         pv.rerender |= res;

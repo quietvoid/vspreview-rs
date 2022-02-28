@@ -10,6 +10,8 @@ mod preferences;
 mod preview_image;
 mod state_window;
 
+mod custom_widgets;
+
 pub use bottom_panel::UiBottomPanel;
 use controls::UiControls;
 pub use error_window::ErrorWindowUi;

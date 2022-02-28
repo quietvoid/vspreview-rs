@@ -68,7 +68,11 @@ impl epi::App for VSPreviewer {
                 // React on canvas resolution change
                 if self.available_size != ui.available_size() {
                     self.available_size = ui.available_size();
-                    self.reprocess_outputs();
+
+                    // If the win size changed and we were already translated
+                    let translate_changed = self.state.translate.length() > 0.0;
+
+                    self.reprocess_outputs(translate_changed);
                 }
 
                 let preview_res = PreviewerMainUi::ui(self, ctx, frame, ui);

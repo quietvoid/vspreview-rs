@@ -29,38 +29,32 @@ impl ErrorWindowUi {
                 .show(ctx, |ui| {
                     if let Some(errors) = pv.errors.get("vapoursynth") {
                         let header = RichText::new("VapourSynth errors").size(20.0);
-                        egui::CollapsingHeader::new(header)
-                            .open(Some(true))
-                            .show(ui, |ui| {
-                                for (i, e) in errors.iter().enumerate() {
-                                    let value = format!("{}. {e}", i + 1);
-                                    ui.label(RichText::new(value).size(18.0));
-                                }
-                            });
+                        egui::CollapsingHeader::new(header).show(ui, |ui| {
+                            for (i, e) in errors.iter().enumerate() {
+                                let value = format!("{}. {e}", i + 1);
+                                ui.label(RichText::new(value).size(18.0));
+                            }
+                        });
                     }
 
                     if let Some(errors) = pv.errors.get("callbacks") {
                         let header = RichText::new("Error fetching frames or reloading").size(20.0);
-                        egui::CollapsingHeader::new(header)
-                            .open(Some(true))
-                            .show(ui, |ui| {
-                                for (i, e) in errors.iter().enumerate() {
-                                    let value = format!("{}. {e}", i + 1);
-                                    ui.label(RichText::new(value).size(18.0));
-                                }
-                            });
+                        egui::CollapsingHeader::new(header).show(ui, |ui| {
+                            for (i, e) in errors.iter().enumerate() {
+                                let value = format!("{}. {e}", i + 1);
+                                ui.label(RichText::new(value).size(18.0));
+                            }
+                        });
                     }
 
                     if let Some(errors) = pv.errors.get("preview") {
                         let header = RichText::new("Error rendering the preview or GUI").size(20.0);
-                        egui::CollapsingHeader::new(header)
-                            .open(Some(true))
-                            .show(ui, |ui| {
-                                for (i, e) in errors.iter().enumerate() {
-                                    let value = format!("{}. {e}", i + 1);
-                                    ui.label(RichText::new(value).size(18.0));
-                                }
-                            });
+                        egui::CollapsingHeader::new(header).show(ui, |ui| {
+                            for (i, e) in errors.iter().enumerate() {
+                                let value = format!("{}. {e}", i + 1);
+                                ui.label(RichText::new(value).size(18.0));
+                            }
+                        });
                     }
 
                     ui.separator();

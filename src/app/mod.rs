@@ -81,3 +81,13 @@ pub struct PreviewFrame {
     pub processed_image: Option<DynamicImage>,
     pub texture: Mutex<Option<egui::TextureHandle>>,
 }
+
+pub struct FetchImageState {
+    frame: eframe::epi::Frame,
+    frame_mutex: Arc<Mutex<Option<FramePromise>>>,
+    script: Arc<Mutex<PreviewedScript>>,
+    state: PreviewState,
+    pf: Option<VSPreviewFrame>,
+    reprocess: bool,
+    win_size: Vec2,
+}

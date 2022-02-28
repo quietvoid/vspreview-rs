@@ -160,7 +160,7 @@ impl UiPreferences {
                     );
 
                     if lost_focus {
-                        pv.reprocess_outputs();
+                        pv.reprocess_outputs(false);
                     }
                 });
         });
@@ -176,7 +176,7 @@ impl UiPreferences {
         } else if pv.state.upscale_to_window != old_upscale_flag
             || pv.state.upsampling_filter != old_upsampling_filter
         {
-            pv.reprocess_outputs();
+            pv.reprocess_outputs(false);
         }
     }
 }

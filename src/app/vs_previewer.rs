@@ -279,18 +279,20 @@ impl VSPreviewer {
                 let frame = frame.clone();
                 let frame_mutex = self.frame_promise.clone();
 
+                let fetch_image_state = FetchImageState {
+                    frame,
+                    frame_mutex,
+                    script,
+                    state,
+                    pf,
+                    reprocess,
+                    win_size,
+                };
+
                 *promise = Some(poll_promise::Promise::spawn_thread(
                     "fetch_frame",
                     move || {
-                        match Self::get_preview_image(
-                            frame,
-                            frame_mutex,
-                            script,
-                            state,
-                            pf,
-                            reprocess,
-                            win_size,
-                        ) {
+                        match Self::get_preview_image(fetch_image_state) {
                             Ok(preview_frame) => preview_frame,
                             Err(e) => {
                                 // Errors here are not recoverable
@@ -363,15 +365,17 @@ impl VSPreviewer {
         }
     }
 
-    pub fn get_preview_image(
-        frame: epi::Frame,
-        frame_mutex: Arc<Mutex<Option<FramePromise>>>,
-        script: Arc<Mutex<PreviewedScript>>,
-        state: PreviewState,
-        pf: Option<VSPreviewFrame>,
-        reprocess: bool,
-        win_size: Vec2,
-    ) -> Result<Option<VSPreviewFrame>> {
+    pub fn get_preview_image(fetch_image_state: FetchImageState) -> Result<Option<VSPreviewFrame>> {
+        let FetchImageState {
+            frame,
+            frame_mutex,
+            script,
+            state,
+            pf,
+            reprocess,
+            win_size,
+        } = fetch_image_state;
+
         // This is fine because only one promise may be executing at a time
         let mut script_mutex = script.lock();
 
@@ -597,11 +601,10 @@ impl VSPreviewer {
 
         // Update if necessary
         if fix_pixel != old_translate {
-            self.state.translate_changed = true;
             self.state.translate = fix_pixel;
             self.state.translate_norm = fix_norm;
 
-            self.reprocess_outputs();
+            self.reprocess_outputs(true);
 
             Ok(true)
         } else {
@@ -613,10 +616,14 @@ impl VSPreviewer {
         self.inputs_focused.values().any(|e| *e)
     }
 
-    pub fn reprocess_outputs(&mut self) {
-        self.outputs
-            .values_mut()
-            .for_each(|o| o.force_reprocess = true);
+    pub fn reprocess_outputs(&mut self, translate_changed: bool) {
+        if translate_changed {
+            self.state.translate_changed |= translate_changed;
+        }
+
+        self.outputs.values_mut().for_each(|o| {
+            o.force_reprocess = true;
+        });
     }
 
     // Can only be called when an output is selected
@@ -741,9 +748,9 @@ impl VSPreviewer {
     pub fn add_error<T>(&mut self, key: &'static str, res: Result<T>) {
         if let Err(e) = res {
             if let Some(list) = self.errors.get_mut(key) {
-                list.push(e.to_string());
+                list.push(format!("{:?}", e));
             } else {
-                self.errors.insert(key, vec![e.to_string()]);
+                self.errors.insert(key, vec![format!("{:?}", e)]);
             }
         }
     }

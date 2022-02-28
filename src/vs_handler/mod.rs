@@ -180,7 +180,7 @@ impl PreviewedScript {
     pub fn add_vs_error<T>(&mut self, res: &Result<T>) {
         if let Err(e) = res {
             let errors = self.vs_error.get_or_insert(Vec::new());
-            errors.push(e.to_string());
+            errors.push(format!("{:?}", e));
         }
     }
 }
