@@ -1,6 +1,5 @@
-use eframe::egui::RichText;
-
 use super::{egui, VSPreviewer};
+use eframe::egui::RichText;
 
 pub struct ErrorWindowUi {}
 

@@ -1,8 +1,8 @@
-use crate::vs_handler::{VSDitherAlgo, VSResizer};
-
 use super::{
     egui, egui::RichText, update_input_key_state, PreviewFilterType, VSPreviewer, STATE_LABEL_COLOR,
 };
+
+use crate::vs_handler::{VSDitherAlgo, VSResizer};
 
 pub struct UiPreferences {}
 
@@ -14,6 +14,7 @@ impl UiPreferences {
 
         let old_upscale_flag = pv.state.upscale_to_window;
         let old_upsampling_filter = pv.state.upsampling_filter;
+        let old_fit_window_flag = pv.state.fit_to_window;
 
         let header = RichText::new("Preferences").color(STATE_LABEL_COLOR);
 
@@ -68,6 +69,7 @@ impl UiPreferences {
                     ui.end_row();
 
                     ui.checkbox(&mut pv.state.upscale_to_window, "Upscale image to window");
+                    ui.checkbox(&mut pv.state.fit_to_window, "Fit image to window");
                     ui.end_row();
 
                     if pv.state.upscale_to_window {
@@ -75,8 +77,13 @@ impl UiPreferences {
 
                         ui.label(RichText::new("Upsampling filter").color(STATE_LABEL_COLOR));
                         egui::ComboBox::from_id_source(egui::Id::new("upsampling_filter_select"))
-                            .selected_text(format!("{:?}", new_upsampling_filter))
+                            .selected_text(new_upsampling_filter.to_string())
                             .show_ui(ui, |ui| {
+                                ui.selectable_value(
+                                    new_upsampling_filter,
+                                    PreviewFilterType::Gpu,
+                                    "GPU",
+                                );
                                 ui.selectable_value(
                                     new_upsampling_filter,
                                     PreviewFilterType::Point,
@@ -175,6 +182,7 @@ impl UiPreferences {
             pv.rerender = true;
         } else if pv.state.upscale_to_window != old_upscale_flag
             || pv.state.upsampling_filter != old_upsampling_filter
+            || pv.state.fit_to_window != old_fit_window_flag
         {
             pv.reprocess_outputs(false);
         }

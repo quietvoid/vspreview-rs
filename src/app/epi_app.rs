@@ -25,6 +25,7 @@ impl epi::App for VSPreviewer {
                 zoom_multiplier: 1.0,
                 scroll_multiplier: 1.0,
                 canvas_margin: 0.0,
+                fit_to_window: true,
                 ..Default::default()
             });
         }

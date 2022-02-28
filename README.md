@@ -8,7 +8,7 @@ Built on top of [egui](https://github.com/emilk/egui) and [vapoursynth-rs](https
 See [eframe](https://github.com/emilk/egui/tree/master/eframe) dependencies.
 
 ### Building
-The minimum Rust version to build `vspreview-rs` is 1.58.1.
+The minimum Rust version to build `vspreview-rs` is 1.59.0.
 
 `RUSTFLAGS="-C target-cpu=native" cargo build --release`  
 Targeting the CPU is highly recommended to get the most performance.

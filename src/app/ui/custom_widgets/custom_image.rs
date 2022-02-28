@@ -8,8 +8,7 @@ pub struct CustomImage {
     size: Vec2,
     tint: Color32,
     sense: Sense,
-
-    translate: Vec2,
+    //translate: Vec2,
 }
 
 impl CustomImage {
@@ -20,15 +19,14 @@ impl CustomImage {
             size: size.into(),
             tint: Color32::WHITE,
             sense: Sense::hover(),
-
-            translate: Vec2::ZERO,
+            //translate: Vec2::ZERO,
         }
     }
 
-    pub fn _translate(mut self, translate: Vec2) -> Self {
+    /*pub fn translate(mut self, translate: Vec2) -> Self {
         self.translate = translate;
         self
-    }
+    }*/
 }
 
 impl CustomImage {
@@ -38,10 +36,8 @@ impl CustomImage {
             let Self {
                 texture_id,
                 uv,
-                size: _,
                 tint,
-                sense: _,
-                translate,
+                ..
             } = self;
 
             {
@@ -49,8 +45,8 @@ impl CustomImage {
                 let mut mesh = Mesh::with_texture(*texture_id);
                 mesh.add_rect_with_uv(rect, *uv, *tint);
 
-                let mut shape = Shape::mesh(mesh);
-                shape.translate(*translate);
+                let shape = Shape::mesh(mesh);
+                //shape.translate(*translate);
 
                 ui.painter().add(shape);
             }

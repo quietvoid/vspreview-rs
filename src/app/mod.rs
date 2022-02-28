@@ -55,6 +55,8 @@ pub struct PreviewState {
     pub upscale_to_window: bool,
     /// Defaults to Point for performance
     pub upsampling_filter: PreviewFilterType,
+    /// Fit the texture before painting
+    pub fit_to_window: bool,
 
     pub zoom_multiplier: f32,
 

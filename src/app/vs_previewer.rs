@@ -96,9 +96,12 @@ impl VSPreviewer {
                 h -= ty;
             }
 
-            // Limit to window size
-            w = w.min(win_size.x);
-            h = h.min(win_size.y);
+            // Limit to window size if not scaling down
+            // Also when zooming in
+            if state.zoom_factor > 1.0 || !state.fit_to_window {
+                w = w.min(win_size.x);
+                h = h.min(win_size.y);
+            }
 
             img = img.crop_imm(x as u32, y as u32, w as u32, h as u32);
         }
@@ -132,7 +135,7 @@ impl VSPreviewer {
         }
 
         // Upscale small images
-        if state.upscale_to_window {
+        if state.upscale_to_window && state.upsampling_filter != PreviewFilterType::Gpu {
             // Image size after crop
             let orig_size = Vec2::new(img.width() as f32, img.height() as f32);
 
@@ -535,24 +538,9 @@ impl VSPreviewer {
             .get(&self.state.cur_output)
             .ok_or(anyhow!("output_needs_rerender: Invalid current output key"))?;
 
-        let old_node = &old.vsoutput.node_info;
-        let old_size = Vec2::from([old_node.width as f32, old_node.height as f32]);
-
         // Update translate values
         let new_node = &new.vsoutput.node_info;
         let new_size = Vec2::from([new_node.width as f32, new_node.height as f32]);
-
-        // Only adjust the zoom if we're not scaling up
-        if !self.state.upscale_to_window
-            && self.state.zoom_factor > 1.0
-            && self.state.translate_norm.length() > 0.0
-        {
-            if old_size.length() > new_size.length() {
-                self.state.zoom_factor += 1.5;
-            } else if old_size.length() < new_size.length() {
-                self.state.zoom_factor -= 1.5;
-            }
-        }
 
         // Scale normalized coords back to pixels
         self.state.translate_changed = true;
@@ -563,7 +551,8 @@ impl VSPreviewer {
             self.state.zoom_factor,
         );
 
-        Ok(old.last_frame_no != new.last_frame_no)
+        // Different frame or output not rendered yet
+        Ok(old.last_frame_no != new.last_frame_no || new.rendered_frame.is_none())
     }
 
     // Returns if the translate changed and we need to reprocess
@@ -599,10 +588,17 @@ impl VSPreviewer {
 
         let (fix_pixel, fix_norm) = self.fix_translation_bounds(&image_size, &new_translate);
 
+        let useless_translate = self.state.fit_to_window && self.state.zoom_factor <= 1.0;
+
         // Update if necessary
         if fix_pixel != old_translate {
-            self.state.translate = fix_pixel;
-            self.state.translate_norm = fix_norm;
+            if !useless_translate {
+                self.state.translate = fix_pixel;
+                self.state.translate_norm = fix_norm;
+            } else {
+                self.state.translate = Vec2::ZERO;
+                self.state.translate_norm = Vec2::ZERO;
+            }
 
             self.reprocess_outputs(true);
 
@@ -715,7 +711,14 @@ impl VSPreviewer {
             let target_size = dimensions_for_window(win_size, image_size).round();
 
             // Needs to be scaled up
+            // Only go into processing if not using egui to scale the texture
             image_size.length() < target_size.length()
+                && state.upsampling_filter != PreviewFilterType::Gpu
+        } else if state.fit_to_window {
+            // Downscaling image
+
+            // Allow upscaling if enabled
+            state.upscale_to_window || state.zoom_factor != 1.0
         } else {
             // Any other processing needed
             state.zoom_factor != 1.0

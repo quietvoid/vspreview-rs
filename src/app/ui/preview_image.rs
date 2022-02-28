@@ -1,5 +1,6 @@
 use super::{
-    custom_widgets::CustomImage, egui, egui::Key, epaint::Vec2, VSPreviewer, MAX_ZOOM, MIN_ZOOM,
+    custom_widgets::CustomImage, egui, egui::Key, epaint::Vec2, PreviewFilterType, VSPreviewer,
+    MAX_ZOOM, MIN_ZOOM,
 };
 use anyhow::{anyhow, Result};
 
@@ -46,7 +47,6 @@ impl UiPreviewImage {
         };
 
         let mut painted_image = false;
-
         let mut image_size = Vec2::ZERO;
 
         // We want the image size for alignment
@@ -57,7 +57,11 @@ impl UiPreviewImage {
             image_size = Vec2::from([image.width() as f32, image.height() as f32]);
         }
 
-        let cross_align = if (image_size.x * pv.state.zoom_factor.min(1.0)) > pv.available_size.x {
+        let win_size = pv.available_size;
+        let unzoomed_image_size = image_size * pv.state.zoom_factor.min(1.0);
+
+        // We want to move the far left side of the image to avoid clipping
+        let cross_align = if unzoomed_image_size.x > win_size.x {
             egui::Align::Min
         } else {
             egui::Align::Center
@@ -73,7 +77,23 @@ impl UiPreviewImage {
                     if let Some(tex) = &*tex_mutex {
                         painted_image = true;
 
-                        let tex_size = tex.size_vec2();
+                        let mut tex_size = tex.size_vec2();
+
+                        if (tex_size.x > win_size.x || tex_size.y > win_size.y)
+                            && pv.state.fit_to_window
+                        {
+                            // Image larger than window, downscaling
+                            tex_size *= (win_size.x / tex_size.x).min(1.0);
+                            tex_size *= (win_size.y / tex_size.y).min(1.0);
+                        } else if (tex_size.x < win_size.x || tex_size.y < win_size.y)
+                            && pv.state.upscale_to_window
+                            && pv.state.upsampling_filter == PreviewFilterType::Gpu
+                        {
+                            // Image smaller than window, upscale
+                            tex_size *= (win_size.x / tex_size.x).max(1.0);
+                            tex_size *= (win_size.y / tex_size.y).max(1.0);
+                        }
+
                         let custom_image = CustomImage::new(tex.id(), tex_size);
 
                         ui.add(custom_image);
