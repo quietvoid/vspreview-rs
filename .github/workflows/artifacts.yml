@@ -1,0 +1,131 @@
+name: Artifacts
+
+on:
+  workflow_dispatch:
+
+env:
+  RELEASE_BIN: vspreview-rs
+  RELEASE_DIR: artifacts
+  WINDOWS_TARGET: x86_64-pc-windows-msvc
+  MACOS_TARGET: x86_64-apple-darwin
+  LINUX_TARGET: x86_64-unknown-linux-musl
+
+jobs:
+  build:
+    name: Build artifacts
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        build: [linux, macos, windows]
+        include: 
+          - build: linux
+            os: ubuntu-latest
+            python-version: 3.9
+            rust: stable
+            cc: gcc-11
+            cxx: g++-11
+          - build: windows
+            os: windows-latest
+            rust: stable
+          - build: macos
+            os: macos-latest
+            rust: stable
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup Python ${{ matrix.python-version }}
+        if: matrix.build == 'linux'
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Rust
+        if: matrix.rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+          default: true
+
+      - name: Install dependencies (Linux)
+        if: matrix.build == 'linux'
+        run: |
+          sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
+          sudo apt-get update -y
+          sudo apt-get install -y g++-11 nasm musl-tools \
+            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libspeechd-dev libxkbcommon-dev libssl-dev
+
+      - name: Install p7zip (macOS)
+        if: matrix.build == 'macos'
+        run: brew install p7zip
+        
+      - name: Set PKG_CONFIG_PATH (Linux)
+        if: matrix.build == 'linux'
+        run: echo "PKG_CONFIG_PATH=$pythonLocation/lib/pkgconfig" >> $GITHUB_ENV
+
+      - name: Install cython (Linux)
+        if: matrix.build == 'linux'
+        run: |
+          python -m pip install --upgrade pip
+          pip install cython
+      
+      - name: Install VapourSynth (Linux)
+        if: matrix.build == 'linux'
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: build/linux-vs-setup.sh
+
+      - name: Install VapourSynth (macOS)
+        if: matrix.build == 'macos'
+        run: brew install vapoursynth
+      
+      - name: Build (Linux)
+        if: matrix.build == 'linux'
+        run: |
+          rustup target add ${{ env.LINUX_TARGET }}
+          cargo build --release --target ${{ env.LINUX_TARGET }}
+
+      - name: Build (macOS)
+        if: matrix.build == 'macos'
+        run: cargo build --release
+
+      - name: Build (Windows)
+        if: matrix.build == 'windows'
+        run: |
+          $Env:Path += ";C:\Program Files\VapourSynth;"
+          cargo build --release
+
+      - name: Create artifact directory
+        run: |
+          mkdir ${{ env.RELEASE_DIR }}
+          mkdir dist
+
+      - name: Create tarball (Linux)
+        if: matrix.build == 'linux'
+        run: |
+          strip ./target/${{ env.LINUX_TARGET }}/release/${{ env.RELEASE_BIN }}
+          mv ./target/${{ env.LINUX_TARGET }}/release/${{ env.RELEASE_BIN }} ./dist/${{ env.RELEASE_BIN }}
+          7z a -ttar -so -an ./dist | 7z a -si ./${{ env.RELEASE_DIR }}/${{ env.RELEASE_BIN }}-${{ env.LINUX_TARGET }}.tar.gz
+
+      - name: Create tarball (Windows)
+        if: matrix.build == 'windows'
+        shell: bash
+        run: |
+          mv ./target/release/${{ env.RELEASE_BIN }}.exe ./dist/${{ env.RELEASE_BIN }}.exe
+          7z a -ttar -so -an ./dist | 7z a -si ./${{ env.RELEASE_DIR }}/${{ env.RELEASE_BIN }}-${{ env.WINDOWS_TARGET }}.tar.gz
+
+      - name: Create tarball (MacOS)
+        if: matrix.build == 'macos'
+        run: |
+          strip ./target/release/${{ env.RELEASE_BIN }}
+          mv ./target/release/${{ env.RELEASE_BIN }} ./dist/${{ env.RELEASE_BIN }}
+          7z a -ttar -so -an ./dist | 7z a -si ./${{ env.RELEASE_DIR }}/${{ env.RELEASE_BIN }}-${{ env.MACOS_TARGET }}.tar.gz
+
+      - name: Upload Zip
+        uses: actions/upload-artifact@v1
+        with:
+          name: ${{ matrix.build }}
+          path: ./${{ env.RELEASE_DIR }}
