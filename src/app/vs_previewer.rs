@@ -238,6 +238,13 @@ impl VSPreviewer {
                     self.rerender = true;
                 }
 
+                // Done reloading, remove promise
+                if let Some(mut mutex) = self.change_script_promise.try_lock() {
+                    if let Some(_) = &*mutex {
+                        *mutex = None;
+                    };
+                }
+
                 // Reset reload data even if errored
                 self.reload_data = None;
             }
@@ -270,8 +277,14 @@ impl VSPreviewer {
 
         if self.rerender {
             if let Some(mut promise) = self.frame_promise.try_lock() {
-                // Still rendering or changing
-                if promise.is_some() {
+                let changing_script = if let Some(p) = self.change_script_promise.try_lock() {
+                    p.is_some()
+                } else {
+                    true
+                };
+
+                // Still rendering, reloading or changing
+                if promise.is_some() || changing_script || self.reload_data.is_some() {
                     return Ok(());
                 }
 
@@ -826,14 +839,12 @@ impl VSPreviewer {
     pub fn check_script_change_finish(&mut self, frame: &epi::Frame) {
         let mut reload = false;
 
-        if let Some(mut mutex) = self.change_script_promise.try_lock() {
+        if let Some(mutex) = self.change_script_promise.try_lock() {
             if let Some(promise) = &*mutex {
                 if let Some(changed) = promise.ready() {
                     if *changed {
                         reload = true;
                     }
-
-                    *mutex = None;
                 }
             };
         }
