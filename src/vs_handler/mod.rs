@@ -217,6 +217,26 @@ impl PreviewedScript {
             });
         }
     }
+
+    pub fn change_script_path(&mut self, new_script: PathBuf) {
+        let mut script_dir = new_script.clone();
+        script_dir.pop();
+
+        let script_file: String = new_script
+            .into_os_string()
+            .into_string()
+            .expect("Invalid script file path!");
+
+        self.script_dir = script_dir;
+        self.script_file = script_file;
+    }
+
+    pub fn send_debug_message(&self, message: String) -> Result<()> {
+        let api = API::get().unwrap();
+        api.log(MessageType::Debug, &message)?;
+
+        Ok(())
+    }
 }
 
 impl Drop for PreviewedScript {

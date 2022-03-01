@@ -16,6 +16,7 @@ use super::*;
 pub struct VSPreviewer {
     pub script: Arc<Mutex<PreviewedScript>>,
     pub state: PreviewState,
+    pub errors: HashMap<&'static str, Vec<String>>,
 
     /// Promise returning the newly reloaded outputs
     pub reload_data: Option<ReloadPromise>,
@@ -38,8 +39,8 @@ pub struct VSPreviewer {
     pub frame_promise: Arc<Mutex<Option<FramePromise>>>,
     /// Promise returning the original props of the current frame
     pub original_props_promise: Arc<Mutex<Option<PropsPromise>>>,
-
-    pub errors: HashMap<&'static str, Vec<String>>,
+    /// Promise returning whether the script was changed after file pick dialog
+    pub change_script_promise: Arc<Mutex<Option<Promise<bool>>>>,
 }
 
 impl VSPreviewer {
@@ -157,11 +158,11 @@ impl VSPreviewer {
             return;
         }
 
-        let script = self.script.clone();
-
         if !self.errors.is_empty() {
             self.errors.clear();
         }
+
+        let script = self.script.clone();
 
         self.reload_data = Some(poll_promise::Promise::spawn_thread(
             "initialization/reload",
@@ -269,15 +270,20 @@ impl VSPreviewer {
 
         if self.rerender {
             if let Some(mut promise) = self.frame_promise.try_lock() {
-                // Still rendering
+                // Still rendering or changing
                 if promise.is_some() {
                     return Ok(());
                 }
 
                 self.rerender = false;
 
-                let reprocess = self.reprocess;
+                let mut reprocess = self.reprocess;
                 self.reprocess = false;
+
+                // Still reloading, can't reprocess
+                if self.reload_data.is_some() && reprocess {
+                    reprocess = false;
+                }
 
                 // Get current state at the moment the frame is requested
                 let state = self.state;
@@ -494,7 +500,8 @@ impl VSPreviewer {
             let path_str = save_path
                 .to_str()
                 .ok_or(anyhow!("Invalid UTF-8 save path"))?;
-            println!("Screenshot saved to {}", path_str);
+            
+            script.send_debug_message(format!("Screenshot saved to {}", path_str))?;
         } else {
             bail!("The script is busy rendering a frame, try again later");
         }
@@ -615,7 +622,7 @@ impl VSPreviewer {
                 self.state.translate_norm = Vec2::ZERO;
             }
 
-            self.reprocess_outputs(true);
+            self.reprocess_outputs(true, true);
 
             Ok(true)
         } else {
@@ -627,13 +634,13 @@ impl VSPreviewer {
         self.inputs_focused.values().any(|e| *e)
     }
 
-    pub fn reprocess_outputs(&mut self, translate_changed: bool) {
+    pub fn reprocess_outputs(&mut self, flag: bool, translate_changed: bool) {
         if translate_changed {
             self.state.translate_changed |= translate_changed;
         }
 
         self.outputs.values_mut().for_each(|o| {
-            o.force_reprocess = true;
+            o.force_reprocess = flag;
         });
     }
 
@@ -646,11 +653,12 @@ impl VSPreviewer {
         let script = self.script.clone();
 
         if let Some(mut promise_mutex) = self.original_props_promise.try_lock() {
-            let props_mutex = self.frame_promise.clone();
+            // Block frame requests
+            let frame_mutex = self.frame_promise.clone();
 
             let promise = poll_promise::Promise::spawn_thread("fetch_original_props", move || {
                 if let Some(mut script_mutex) = script.try_lock() {
-                    let _lock = props_mutex.lock();
+                    let _lock = frame_mutex.lock();
 
                     let props_res = script_mutex.get_original_props(cur_output, cur_frame_no);
                     script_mutex.add_vs_error(&props_res);
@@ -756,6 +764,8 @@ impl VSPreviewer {
         // Check for original props if requested
         self.check_original_props_finish()?;
 
+        self.check_script_change_finish(frame);
+
         // We want a new frame
         // Previously rendering frames must have completed to request a new one
         self.try_rerender(frame)?;
@@ -763,7 +773,7 @@ impl VSPreviewer {
         Ok(())
     }
 
-    pub fn add_error<T>(&mut self, key: &'static str, res: Result<T>) {
+    pub fn add_error<T>(&mut self, key: &'static str, res: &Result<T>) {
         if let Err(e) = res {
             if let Some(list) = self.errors.get_mut(key) {
                 list.push(format!("{:?}", e));
@@ -780,6 +790,56 @@ impl VSPreviewer {
             } else {
                 self.errors.insert(key, errors.to_owned());
             }
+        }
+    }
+
+    pub fn change_script_file(&mut self, frame: &epi::Frame) {
+        let script = self.script.clone();
+        let frame = frame.clone();
+
+        if let Some(mut promise_mutex) = self.change_script_promise.try_lock() {
+            let promise = Promise::spawn_thread("change_script", move || {
+                let path = std::env::current_dir().unwrap();
+
+                let new_file = rfd::FileDialog::new()
+                    .set_title("Select a VapourSynth script file")
+                    .add_filter("VapourSynth", &["vpy"])
+                    .set_directory(&path)
+                    .pick_file();
+
+                if let Some(new_file) = new_file {
+                    let mut script_mutex = script.lock();
+
+                    script_mutex.change_script_path(new_file);
+                    frame.request_repaint();
+
+                    true
+                } else {
+                    false
+                }
+            });
+
+            *promise_mutex = Some(promise);
+        }
+    }
+
+    pub fn check_script_change_finish(&mut self, frame: &epi::Frame) {
+        let mut reload = false;
+
+        if let Some(mut mutex) = self.change_script_promise.try_lock() {
+            if let Some(promise) = &*mutex {
+                if let Some(changed) = promise.ready() {
+                    if *changed {
+                        reload = true;
+                    }
+
+                    *mutex = None;
+                }
+            };
+        }
+
+        if reload {
+            self.reload(frame.clone());
         }
     }
 }

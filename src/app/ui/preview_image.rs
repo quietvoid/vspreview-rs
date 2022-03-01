@@ -3,11 +3,12 @@ use super::{
     MAX_ZOOM, MIN_ZOOM,
 };
 use anyhow::{anyhow, Result};
+use eframe::egui::Response;
 
 pub struct UiPreviewImage {}
 
 impl UiPreviewImage {
-    pub fn ui(pv: &mut VSPreviewer, ui: &mut egui::Ui) -> Result<()> {
+    pub fn ui(pv: &mut VSPreviewer, ui: &mut egui::Ui) -> Result<Response> {
         let cur_output = pv.state.cur_output;
         let has_current_output = !pv.outputs.is_empty() && pv.outputs.contains_key(&cur_output);
 
@@ -70,7 +71,7 @@ impl UiPreviewImage {
         let canvas_layout = egui::Layout::centered_and_justified(egui::Direction::TopDown)
             .with_cross_align(cross_align);
 
-        ui.with_layout(canvas_layout, |ui| {
+        let canvas_res = ui.with_layout(canvas_layout, |ui| {
             if let Some(pf) = preview_frame {
                 let pf = pf.read();
                 if let Some(tex_mutex) = pf.texture.try_lock() {
@@ -107,10 +108,10 @@ impl UiPreviewImage {
                                 zoom_delta,
                                 scroll_delta,
                             );
-                            pv.add_error("preview", res);
+                            pv.add_error("preview", &res);
 
                             res = Self::handle_keypresses(pv, ui);
-                            pv.add_error("preview", res);
+                            pv.add_error("preview", &res);
                         }
                     }
                 };
@@ -122,7 +123,7 @@ impl UiPreviewImage {
             }
         });
 
-        Ok(())
+        Ok(canvas_res.response)
     }
 
     pub fn handle_keypresses(pv: &mut VSPreviewer, ui: &mut egui::Ui) -> Result<()> {
@@ -342,7 +343,7 @@ impl UiPreviewImage {
 
         // Set other outputs to reprocess if we're modifying the image
         if res {
-            pv.reprocess_outputs(reprocess_translate);
+            pv.reprocess_outputs(true, reprocess_translate);
         }
 
         pv.rerender |= res;

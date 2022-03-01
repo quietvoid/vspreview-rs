@@ -60,3 +60,6 @@ Refer to [directories-next](https://docs.rs/directories-next/2.0.0/directories_n
 - Reload script: `R` 
 - Take a screenshot: `S` (saves to script directory)  
 - Copy the current frame number to clipboard: `Ctrl` + `Shift` + `C`  
+
+**Context menu** (right click):  
+- Open a new script file

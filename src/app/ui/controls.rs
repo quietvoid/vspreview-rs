@@ -14,15 +14,15 @@ impl UiControls {
             .spacing([8.0, 4.0])
             .show(ui, |ui| {
                 let mut res = Self::output_select_ui(pv, ui);
-                pv.add_error("preview", res);
+                pv.add_error("preview", &res);
                 ui.end_row();
 
                 res = Self::zoom_slider_ui(pv, ui);
-                pv.add_error("preview", res);
+                pv.add_error("preview", &res);
                 ui.end_row();
 
                 res = Self::translate_drag_ui(pv, ui);
-                pv.add_error("preview", res);
+                pv.add_error("preview", &res);
                 ui.end_row();
             });
     }
