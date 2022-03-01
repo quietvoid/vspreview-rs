@@ -1,6 +1,9 @@
 use super::{update_input_key_state, PreviewFilterType, VSPreviewer, MAX_ZOOM, MIN_ZOOM};
 use anyhow::Result;
-use eframe::{egui, epaint, epi};
+use eframe::{
+    egui::{self, RichText},
+    epaint, epi,
+};
 
 mod bottom_panel;
 mod controls;
@@ -40,7 +43,17 @@ impl PreviewerMainUi {
         }
 
         // Centered image painted on
-        UiPreviewImage::ui(pv, ui)?;
+        let canvas_res = UiPreviewImage::ui(pv, ui)?;
+        canvas_res.context_menu(|ui| {
+            let change_script_text = RichText::new("Open script file")
+                .size(18.0)
+                .color(STATE_LABEL_COLOR);
+
+            if ui.button(change_script_text).clicked() {
+                pv.change_script_file(frame);
+                ui.close_menu();
+            }
+        });
 
         // Bottom panel
         if pv.state.show_gui && has_current_output {

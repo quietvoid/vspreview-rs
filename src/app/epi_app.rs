@@ -53,7 +53,7 @@ impl epi::App for VSPreviewer {
 
     fn update(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
         let promise_res = self.check_promise_callbacks(ctx, frame);
-        self.add_error("callbacks", promise_res);
+        self.add_error("callbacks", &promise_res);
 
         let panel_frame = Frame::default()
             .fill(Color32::from_gray(51))
@@ -73,11 +73,11 @@ impl epi::App for VSPreviewer {
                     // If the win size changed and we were already translated
                     let translate_changed = self.state.translate.length() > 0.0;
 
-                    self.reprocess_outputs(translate_changed);
+                    self.reprocess_outputs(true, translate_changed);
                 }
 
                 let preview_res = PreviewerMainUi::ui(self, ctx, frame, ui);
-                self.add_error("preview", preview_res);
+                self.add_error("preview", &preview_res);
 
                 // Display errors if any
                 MessageWindowUi::ui(self, ctx);
