@@ -843,24 +843,26 @@ impl VSPreviewer {
     }
 
     pub fn check_misc_finish(&mut self, frame: &epi::Frame) {
-        let mut reload_type = ReloadType::None;
+        let mut reload_type = None;
 
         if let Some(mutex) = self.misc_promise.try_lock() {
             if let Some(promise) = &*mutex {
                 if let Some(rt) = promise.ready() {
-                    reload_type = *rt;
+                    reload_type = Some(*rt);
                 }
             };
         }
 
         // Reload handles the promise reset, to avoid rendering other frames
-        match reload_type {
-            ReloadType::Reload => self.reload(frame.clone()),
-            ReloadType::Reprocess => {
-                self.reprocess_outputs(true, false);
-                *self.misc_promise.lock() = None;
+        if let Some(reload_type) = reload_type {
+            match reload_type {
+                ReloadType::Reload => self.reload(frame.clone()),
+                ReloadType::Reprocess => {
+                    self.reprocess_outputs(true, false);
+                    *self.misc_promise.lock() = None;
+                }
+                ReloadType::None => *self.misc_promise.lock() = None,
             }
-            ReloadType::None => *self.misc_promise.lock() = None,
         }
     }
 
