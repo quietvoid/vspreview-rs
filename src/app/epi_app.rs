@@ -7,6 +7,8 @@ use eframe::{
 
 use super::*;
 
+const APP_KEY2: &str = "app2";
+
 impl epi::App for VSPreviewer {
     fn name(&self) -> &str {
         "vspreview-rs"
@@ -28,6 +30,10 @@ impl epi::App for VSPreviewer {
                 fit_to_window: true,
                 ..Default::default()
             });
+
+            self.transforms = Arc::new(Mutex::new(
+                epi::get_value(storage, APP_KEY2).unwrap_or_default(),
+            ));
         }
 
         // Set the global theme, default to dark mode
@@ -46,6 +52,8 @@ impl epi::App for VSPreviewer {
         } else if self.state.zoom_multiplier > 2.0 {
             self.state.zoom_multiplier = 2.0;
         }
+
+        self.init_transforms();
 
         // Request initial outputs
         self.reload(frame.clone());
@@ -88,5 +96,9 @@ impl epi::App for VSPreviewer {
 
     fn save(&mut self, storage: &mut dyn epi::Storage) {
         epi::set_value(storage, epi::APP_KEY, &self.state);
+
+        if let Some(transforms) = self.transforms.try_lock() {
+            epi::set_value(storage, APP_KEY2, &*transforms);
+        }
     }
 }

@@ -42,6 +42,8 @@ Original frame props require an extra frame request, so they can be obtained on 
 - **Scroll multiplier**: Mutliplies the pixels translated on wheel scroll.
     - Can be used to translate faster or slower.
 - **Canvas margin**: Padding to add around the image.
+- **Transforms**: Transformations applied to the image previewed:
+    - **ICC Profile**: ICC profile to use for color correction of the rendered image.
 
 &nbsp;
 

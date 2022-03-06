@@ -129,6 +129,7 @@ impl UiPreviewImage {
     pub fn handle_keypresses(pv: &mut VSPreviewer, ui: &mut egui::Ui) -> Result<()> {
         let mut rerender = Self::check_update_seek(pv, ui)?;
         rerender |= Self::check_update_output(pv, ui)?;
+        rerender |= Self::check_icc_toggle(pv, ui)?;
 
         if ui.input().key_pressed(Key::S) {
             pv.save_screenshot()?;
@@ -349,5 +350,22 @@ impl UiPreviewImage {
         pv.rerender |= res;
 
         Ok(())
+    }
+
+    pub fn check_icc_toggle(pv: &mut VSPreviewer, ui: &mut egui::Ui) -> Result<bool> {
+        // Must not have modifiers
+        if !ui.input().modifiers.is_none() {
+            return Ok(false);
+        }
+
+        let mut res = false;
+
+        // Toggle is always a rerender
+        if ui.input().key_pressed(Key::C) {
+            pv.state.icc_enabled = !pv.state.icc_enabled;
+            res = true;
+        }
+
+        Ok(res)
     }
 }

@@ -6,6 +6,8 @@ use fast_image_resize as fr;
 use image::{DynamicImage, ImageBuffer};
 use vapoursynth::prelude::{ColorFamily, FrameRef};
 
+use crate::app::{PreviewState, PreviewTransforms};
+
 /// `DynamicImage` from `VS::FrameRef`
 ///    `ColorFamily::Gray` => `DynamicImage::ImageLuma8`
 ///    `ColorFamily::RGB` => `DynamicImage::ImageRgb8`
@@ -115,16 +117,39 @@ pub fn dimensions_for_window(win_size: &Vec2, orig_size: &Vec2) -> Vec2 {
     size
 }
 
-pub fn image_to_colorimage(img: &DynamicImage) -> ColorImage {
+pub fn image_to_colorimage(
+    img: &DynamicImage,
+    state: &PreviewState,
+    transforms: &PreviewTransforms,
+) -> ColorImage {
     let size = [img.width() as usize, img.height() as usize];
+
+    let icc = if state.icc_enabled {
+        transforms.icc.as_ref()
+    } else {
+        None
+    };
 
     let pixels = match img {
         DynamicImage::ImageLuma8(luma) => luma.iter().copied().map(Color32::from_gray).collect(),
-        DynamicImage::ImageRgb8(rgb) => rgb
-            .as_raw()
-            .chunks_exact(3)
-            .map(|p| Color32::from_rgb(p[0], p[1], p[2]))
-            .collect(),
+        DynamicImage::ImageRgb8(rgb) => {
+            if let Some(icc) = icc {
+                let t = icc.transform.as_ref().unwrap();
+                let mut transformed: Vec<image::Rgb<u8>> = rgb.pixels().cloned().collect();
+
+                t.transform_in_place(&mut transformed);
+
+                transformed
+                    .iter()
+                    .map(|p| Color32::from_rgb(p[0], p[1], p[2]))
+                    .collect()
+            } else {
+                rgb.as_raw()
+                    .chunks_exact(3)
+                    .map(|p| Color32::from_rgb(p[0], p[1], p[2]))
+                    .collect()
+            }
+        }
         _ => unreachable!(),
     };
 

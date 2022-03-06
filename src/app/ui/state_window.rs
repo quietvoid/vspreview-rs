@@ -19,7 +19,7 @@ impl UiStateWindow {
                     pv.add_error("preview", &res);
                 }
 
-                UiPreferences::ui(pv, ui);
+                UiPreferences::ui(pv, frame, ui);
             });
     }
 }

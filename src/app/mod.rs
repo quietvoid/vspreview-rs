@@ -7,6 +7,7 @@ use poll_promise::Promise;
 
 mod epi_app;
 mod preview_filter_type;
+mod transforms;
 mod ui;
 mod vs_previewer;
 
@@ -22,6 +23,8 @@ use crate::utils::{
     dimensions_for_window, resize_fast, translate_norm_coeffs, update_input_key_state,
 };
 
+use transforms::icc::IccProfile;
+
 pub const MIN_ZOOM: f32 = 0.125;
 pub const MAX_ZOOM: f32 = 64.0;
 
@@ -33,7 +36,7 @@ type ReloadPromise = Promise<Option<HashMap<i32, VSOutput>>>;
 /// TODO:
 ///   - Canvas background color
 ///   - ?
-#[derive(Debug, Default, Clone, Copy, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Default, Copy, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct PreviewState {
     pub show_gui: bool,
@@ -62,6 +65,8 @@ pub struct PreviewState {
 
     pub scroll_multiplier: f32,
     pub canvas_margin: f32,
+
+    pub icc_enabled: bool,
 }
 
 #[derive(Default)]
@@ -92,4 +97,17 @@ pub struct FetchImageState {
     pf: Option<VSPreviewFrame>,
     reprocess: bool,
     win_size: Vec2,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ReloadType {
+    None,
+    Reload,
+    Reprocess,
+}
+
+#[derive(Debug, Default, serde::Deserialize, serde::Serialize)]
+#[serde(default)]
+pub struct PreviewTransforms {
+    pub icc: Option<IccProfile>,
 }

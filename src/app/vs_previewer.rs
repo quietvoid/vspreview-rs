@@ -39,8 +39,11 @@ pub struct VSPreviewer {
     pub frame_promise: Arc<Mutex<Option<FramePromise>>>,
     /// Promise returning the original props of the current frame
     pub original_props_promise: Arc<Mutex<Option<PropsPromise>>>,
-    /// Promise returning whether the script was changed after file pick dialog
-    pub change_script_promise: Arc<Mutex<Option<Promise<bool>>>>,
+
+    /// Promise returning a bool, whether to rerender or not
+    pub misc_promise: Arc<Mutex<Option<Promise<ReloadType>>>>,
+
+    pub transforms: Arc<Mutex<PreviewTransforms>>,
 }
 
 impl VSPreviewer {
@@ -239,8 +242,8 @@ impl VSPreviewer {
                 }
 
                 // Done reloading, remove promise
-                if let Some(mut mutex) = self.change_script_promise.try_lock() {
-                    if let Some(_) = &*mutex {
+                if let Some(mut mutex) = self.misc_promise.try_lock() {
+                    if (*mutex).is_some() {
                         *mutex = None;
                     };
                 }
@@ -277,14 +280,14 @@ impl VSPreviewer {
 
         if self.rerender {
             if let Some(mut promise) = self.frame_promise.try_lock() {
-                let changing_script = if let Some(p) = self.change_script_promise.try_lock() {
+                let misc_in_progress = if let Some(p) = self.misc_promise.try_lock() {
                     p.is_some()
                 } else {
                     true
                 };
 
                 // Still rendering, reloading or changing
-                if promise.is_some() || changing_script || self.reload_data.is_some() {
+                if promise.is_some() || misc_in_progress || self.reload_data.is_some() {
                     return Ok(());
                 }
 
@@ -307,11 +310,7 @@ impl VSPreviewer {
                 let script = self.script.clone();
                 let win_size = self.available_size;
 
-                let pf = if reprocess {
-                    self.get_current_frame()?
-                } else {
-                    None
-                };
+                let pf = self.get_current_frame()?;
 
                 let frame = frame.clone();
                 let frame_mutex = self.frame_promise.clone();
@@ -369,10 +368,17 @@ impl VSPreviewer {
                             &pf.vsframe.image
                         };
 
-                        // Update texture on render done
+                        let transforms = self.transforms.lock();
+
                         // Convert to ColorImage on texture change
-                        *tex_mutex =
-                            Some(ctx.load_texture("frame", image_to_colorimage(final_image)));
+                        let colorimage = image_to_colorimage(final_image, &self.state, &transforms);
+
+                        // Update texture on render done
+                        if let Some(ref mut tex) = *tex_mutex {
+                            tex.set(colorimage);
+                        } else {
+                            *tex_mutex = Some(ctx.load_texture("frame", colorimage));
+                        }
 
                         // Update last output once the new frame is rendered
                         self.last_output_key = output.vsoutput.index;
@@ -513,7 +519,7 @@ impl VSPreviewer {
             let path_str = save_path
                 .to_str()
                 .ok_or(anyhow!("Invalid UTF-8 save path"))?;
-            
+
             script.send_debug_message(format!("Screenshot saved to {}", path_str))?;
         } else {
             bail!("The script is busy rendering a frame, try again later");
@@ -777,7 +783,7 @@ impl VSPreviewer {
         // Check for original props if requested
         self.check_original_props_finish()?;
 
-        self.check_script_change_finish(frame);
+        self.check_misc_finish(frame);
 
         // We want a new frame
         // Previously rendering frames must have completed to request a new one
@@ -810,7 +816,7 @@ impl VSPreviewer {
         let script = self.script.clone();
         let frame = frame.clone();
 
-        if let Some(mut promise_mutex) = self.change_script_promise.try_lock() {
+        if let Some(mut promise_mutex) = self.misc_promise.try_lock() {
             let promise = Promise::spawn_thread("change_script", move || {
                 let path = std::env::current_dir().unwrap();
 
@@ -826,9 +832,9 @@ impl VSPreviewer {
                     script_mutex.change_script_path(new_file);
                     frame.request_repaint();
 
-                    true
+                    ReloadType::Reload
                 } else {
-                    false
+                    ReloadType::None
                 }
             });
 
@@ -836,21 +842,64 @@ impl VSPreviewer {
         }
     }
 
-    pub fn check_script_change_finish(&mut self, frame: &epi::Frame) {
-        let mut reload = false;
+    pub fn check_misc_finish(&mut self, frame: &epi::Frame) {
+        let mut reload_type = ReloadType::None;
 
-        if let Some(mutex) = self.change_script_promise.try_lock() {
+        if let Some(mutex) = self.misc_promise.try_lock() {
             if let Some(promise) = &*mutex {
-                if let Some(changed) = promise.ready() {
-                    if *changed {
-                        reload = true;
-                    }
+                if let Some(rt) = promise.ready() {
+                    reload_type = *rt;
                 }
             };
         }
 
-        if reload {
-            self.reload(frame.clone());
+        // Reload handles the promise reset, to avoid rendering other frames
+        match reload_type {
+            ReloadType::Reload => self.reload(frame.clone()),
+            ReloadType::Reprocess => {
+                self.reprocess_outputs(true, false);
+                *self.misc_promise.lock() = None;
+            }
+            ReloadType::None => *self.misc_promise.lock() = None,
+        }
+    }
+
+    pub fn init_transforms(&mut self) {
+        let mut transforms = self.transforms.lock();
+
+        if let Some(icc) = transforms.icc.as_mut() {
+            icc.setup();
+        }
+    }
+
+    pub fn change_icc_profile(&mut self, frame: &epi::Frame) {
+        let frame = frame.clone();
+        let transforms = self.transforms.clone();
+
+        if let Some(mut promise_mutex) = self.misc_promise.try_lock() {
+            let promise = Promise::spawn_thread("change_icc", move || {
+                let new_file = rfd::FileDialog::new()
+                    .set_title("Select a ICC profile file")
+                    .add_filter("ICC", &["icc", "icm"])
+                    .pick_file();
+
+                if let Some(new_file) = new_file {
+                    let mut transforms = transforms.lock();
+
+                    let mut profile = IccProfile::srgb(new_file);
+                    profile.setup();
+
+                    transforms.icc = Some(profile);
+
+                    frame.request_repaint();
+
+                    ReloadType::Reprocess
+                } else {
+                    ReloadType::None
+                }
+            });
+
+            *promise_mutex = Some(promise);
         }
     }
 }
