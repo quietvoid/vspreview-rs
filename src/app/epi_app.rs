@@ -7,7 +7,12 @@ use eframe::{
 
 use super::*;
 
-const APP_KEY2: &str = "app2";
+#[derive(Debug, Default, serde::Deserialize, serde::Serialize)]
+#[serde(default)]
+pub struct SavedState {
+    preview_state: PreviewState,
+    transforms: PreviewTransforms,
+}
 
 impl epi::App for VSPreviewer {
     fn name(&self) -> &str {
@@ -22,18 +27,10 @@ impl epi::App for VSPreviewer {
     ) {
         // Load existing or default state
         if let Some(storage) = _storage {
-            self.state = epi::get_value(storage, epi::APP_KEY).unwrap_or(PreviewState {
-                zoom_factor: 1.0,
-                zoom_multiplier: 1.0,
-                scroll_multiplier: 1.0,
-                canvas_margin: 0.0,
-                fit_to_window: true,
-                ..Default::default()
-            });
+            let saved_state: SavedState = epi::get_value(storage, epi::APP_KEY).unwrap_or_default();
 
-            self.transforms = Arc::new(Mutex::new(
-                epi::get_value(storage, APP_KEY2).unwrap_or_default(),
-            ));
+            self.state = saved_state.preview_state;
+            self.transforms = Arc::new(Mutex::new(saved_state.transforms));
         }
 
         // Set the global theme, default to dark mode
@@ -95,10 +92,11 @@ impl epi::App for VSPreviewer {
     }
 
     fn save(&mut self, storage: &mut dyn epi::Storage) {
-        epi::set_value(storage, epi::APP_KEY, &self.state);
+        let saved_state = SavedState {
+            preview_state: self.state,
+            transforms: self.transforms.lock().clone(),
+        };
 
-        if let Some(transforms) = self.transforms.try_lock() {
-            epi::set_value(storage, APP_KEY2, &*transforms);
-        }
+        epi::set_value(storage, epi::APP_KEY, &saved_state);
     }
 }

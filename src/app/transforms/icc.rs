@@ -19,14 +19,14 @@ pub struct IccProfile {
     pub transform: Option<Transform<image::Rgb<u8>, image::Rgb<u8>>>,
 }
 
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Copy, Clone, serde::Deserialize, serde::Serialize)]
 pub struct XyYCoords {
     x: f64,
     y: f64,
     y2: f64,
 }
 
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Copy, Clone, serde::Deserialize, serde::Serialize)]
 pub struct XyYTriple {
     red: XyYCoords,
     green: XyYCoords,
@@ -132,6 +132,19 @@ impl From<&XyYTriple> for CIExyYTRIPLE {
             Red: CIExyY::from(&prim.red),
             Green: CIExyY::from(&prim.green),
             Blue: CIExyY::from(&prim.blue),
+        }
+    }
+}
+
+impl Clone for IccProfile {
+    fn clone(&self) -> Self {
+        Self {
+            icc_file: self.icc_file.clone(),
+            target_profile: None,
+            input_profile: None,
+            input_whitepoint: self.input_whitepoint,
+            input_primaries: self.input_primaries,
+            transform: None,
         }
     }
 }

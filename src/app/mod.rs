@@ -36,7 +36,7 @@ type ReloadPromise = Promise<Option<HashMap<i32, VSOutput>>>;
 /// TODO:
 ///   - Canvas background color
 ///   - ?
-#[derive(Debug, Default, Copy, Clone, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Copy, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct PreviewState {
     pub show_gui: bool,
@@ -106,8 +106,30 @@ pub enum ReloadType {
     Reprocess,
 }
 
-#[derive(Debug, Default, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct PreviewTransforms {
     pub icc: Option<IccProfile>,
+}
+
+impl Default for PreviewState {
+    fn default() -> Self {
+        Self {
+            zoom_factor: 1.0,
+            zoom_multiplier: 1.0,
+            scroll_multiplier: 1.0,
+            canvas_margin: 0.0,
+            fit_to_window: true,
+            show_gui: Default::default(),
+            cur_output: Default::default(),
+            cur_frame_no: Default::default(),
+            translate_changed: Default::default(),
+            translate: Default::default(),
+            translate_norm: Default::default(),
+            frame_transform_opts: Default::default(),
+            upscale_to_window: Default::default(),
+            upsampling_filter: Default::default(),
+            icc_enabled: Default::default(),
+        }
+    }
 }
