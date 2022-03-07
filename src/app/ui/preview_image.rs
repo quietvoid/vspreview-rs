@@ -363,6 +363,8 @@ impl UiPreviewImage {
         // Toggle is always a rerender
         if ui.input().key_pressed(Key::C) {
             pv.state.icc_enabled = !pv.state.icc_enabled;
+
+            pv.reprocess_outputs(true, false);
             res = true;
         }
 
