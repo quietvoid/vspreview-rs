@@ -212,7 +212,7 @@ impl Display for MdcvMetadata {
         let [wx, wy] = white_point;
 
         let primaries_str = match (rx, ry, gx, gy, bx, by) {
-            (34000, 16000, 8500, 39850, 6550, 2300) => Some("BT.2020"),
+            (35400, 14600, 8500, 39850, 6550, 2300) => Some("BT.2020"),
             (34000, 16000, 13250, 34500, 7500, 3000) => Some("Display P3"),
             (32000, 16500, 15000, 30000, 7500, 3000) => Some("BT.709"),
             _ => None,
