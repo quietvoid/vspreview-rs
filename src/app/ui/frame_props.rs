@@ -1,14 +1,14 @@
-use super::{egui, egui::RichText, epi, VSPreviewer, STATE_LABEL_COLOR};
+use super::{egui, egui::RichText, VSPreviewer, STATE_LABEL_COLOR};
 use anyhow::{anyhow, Result};
 
 pub struct UiFrameProps {}
 
 impl UiFrameProps {
-    pub fn ui(pv: &mut VSPreviewer, frame: &epi::Frame, ui: &mut egui::Ui) -> Result<()> {
+    pub fn ui(pv: &mut VSPreviewer, ctx: &egui::Context, ui: &mut egui::Ui) -> Result<()> {
         let output = pv
             .outputs
             .get(&pv.state.cur_output)
-            .ok_or(anyhow!("UiFrameProps::ui: Invalid current output key"))?;
+            .ok_or_else(|| anyhow!("UiFrameProps::ui: Invalid current output key"))?;
         let mut props = None;
 
         if let Some(pf) = &output.rendered_frame {
@@ -124,7 +124,7 @@ impl UiFrameProps {
                             let reload_btn = ui.button("Reload original props");
 
                             if reload_btn.clicked() {
-                                pv.fetch_original_props(frame);
+                                pv.fetch_original_props(ctx);
                             }
                         });
                         ui.end_row();

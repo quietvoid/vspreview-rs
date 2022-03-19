@@ -5,7 +5,7 @@ use image::DynamicImage;
 use parking_lot::{Mutex, RwLock};
 use poll_promise::Promise;
 
-mod epi_app;
+mod eframe_app;
 mod preview_filter_type;
 mod transforms;
 mod ui;
@@ -90,7 +90,7 @@ pub struct PreviewFrame {
 }
 
 pub struct FetchImageState {
-    frame: eframe::epi::Frame,
+    ctx: egui::Context,
     frame_mutex: Arc<Mutex<Option<FramePromise>>>,
     script: Arc<Mutex<PreviewedScript>>,
     state: PreviewState,

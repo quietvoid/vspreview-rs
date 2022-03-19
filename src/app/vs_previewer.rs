@@ -156,7 +156,7 @@ impl VSPreviewer {
     }
 
     // Always reloads the script
-    pub fn reload(&mut self, frame: epi::Frame) {
+    pub fn reload(&mut self, ctx: egui::Context) {
         if self.reload_data.is_some() {
             return;
         }
@@ -187,7 +187,7 @@ impl VSPreviewer {
                     };
 
                     // Not ready but we need to get the checker going
-                    frame.request_repaint();
+                    ctx.request_repaint();
 
                     outputs
                 } else {
@@ -220,14 +220,15 @@ impl VSPreviewer {
                         let mut keys: Vec<&i32> = self.outputs.keys().collect();
                         keys.sort();
 
-                        self.state.cur_output =
-                            **keys.first().ok_or(anyhow!("No outputs available"))?;
+                        self.state.cur_output = **keys
+                            .first()
+                            .ok_or_else(|| anyhow!("No outputs available"))?;
                     }
 
                     let output = self
                         .outputs
                         .get_mut(&self.state.cur_output)
-                        .ok_or(anyhow!("outputs reload: Invalid current output key"))?;
+                        .ok_or_else(|| anyhow!("outputs reload: Invalid current output key"))?;
                     let node_info = &output.vsoutput.node_info;
 
                     self.reload_data = None;
@@ -256,41 +257,41 @@ impl VSPreviewer {
         Ok(())
     }
 
-    pub fn try_rerender(&mut self, frame: &epi::Frame) -> Result<()> {
-        if !self.outputs.is_empty() {
-            let output = self
-                .outputs
-                .get_mut(&self.state.cur_output)
-                .ok_or(anyhow!("rerender: Invalid current output key"))?;
+    pub fn try_rerender(&mut self, ctx: &egui::Context) -> Result<()> {
+        if let Some(mut promise) = self.frame_promise.try_lock() {
+            let misc_in_progress = if let Some(p) = self.misc_promise.try_lock() {
+                p.is_some()
+            } else {
+                true
+            };
 
-            if output.force_reprocess {
-                self.rerender = true;
-
-                // Reprocess only if the output is already the correct frame
-                self.reprocess = output.last_frame_no == self.state.cur_frame_no;
-
-                output.force_reprocess = false;
+            // Still rendering, reloading or changing
+            if promise.is_some() || misc_in_progress || self.reload_data.is_some() {
+                return Ok(());
             }
 
-            if self.rerender && !self.reprocess {
-                // Remove original frame props when a VS render is requested
-                output.original_props = None;
-            }
-        }
+            if !self.outputs.is_empty() {
+                let output = self
+                    .outputs
+                    .get_mut(&self.state.cur_output)
+                    .ok_or_else(|| anyhow!("rerender: Invalid current output key"))?;
 
-        if self.rerender {
-            if let Some(mut promise) = self.frame_promise.try_lock() {
-                let misc_in_progress = if let Some(p) = self.misc_promise.try_lock() {
-                    p.is_some()
-                } else {
-                    true
-                };
+                if output.force_reprocess {
+                    self.rerender = true;
 
-                // Still rendering, reloading or changing
-                if promise.is_some() || misc_in_progress || self.reload_data.is_some() {
-                    return Ok(());
+                    // Reprocess only if the output is already the correct frame
+                    self.reprocess = output.last_frame_no == self.state.cur_frame_no;
+
+                    output.force_reprocess = false;
                 }
 
+                if self.rerender && !self.reprocess {
+                    // Remove original frame props when a VS render is requested
+                    output.original_props = None;
+                }
+            }
+
+            if self.rerender {
                 self.rerender = false;
 
                 let mut reprocess = self.reprocess;
@@ -312,11 +313,11 @@ impl VSPreviewer {
 
                 let pf = self.get_current_frame()?;
 
-                let frame = frame.clone();
+                let ctx = ctx.clone();
                 let frame_mutex = self.frame_promise.clone();
 
                 let fetch_image_state = FetchImageState {
-                    frame,
+                    ctx,
                     frame_mutex,
                     script,
                     state,
@@ -353,10 +354,12 @@ impl VSPreviewer {
                     let pf = rendered_frame.read();
 
                     if let Some(mut tex_mutex) = pf.texture.try_lock() {
-                        let output = self
-                            .outputs
-                            .get_mut(&self.state.cur_output)
-                            .ok_or(anyhow!("current_output_mut: Invalid current output key"))?;
+                        let output =
+                            self.outputs
+                                .get_mut(&self.state.cur_output)
+                                .ok_or_else(|| {
+                                    anyhow!("current_output_mut: Invalid current output key")
+                                })?;
 
                         // Set PreviewFrame from what the promise returned
                         output.rendered_frame = Some(rendered_frame.clone());
@@ -401,7 +404,7 @@ impl VSPreviewer {
             let output = self
                 .outputs
                 .get(&self.state.cur_output)
-                .ok_or(anyhow!("get_current_Frame: Invalid current output key"))?;
+                .ok_or_else(|| anyhow!("get_current_Frame: Invalid current output key"))?;
             Ok(output.rendered_frame.clone())
         } else {
             Ok(None)
@@ -410,7 +413,7 @@ impl VSPreviewer {
 
     pub fn get_preview_image(fetch_image_state: FetchImageState) -> Result<Option<VSPreviewFrame>> {
         let FetchImageState {
-            frame,
+            ctx,
             frame_mutex,
             script,
             state,
@@ -486,7 +489,7 @@ impl VSPreviewer {
         };
 
         // Once frame is ready
-        frame.request_repaint();
+        ctx.request_repaint();
 
         Ok(pf)
     }
@@ -504,7 +507,7 @@ impl VSPreviewer {
             let output = self
                 .outputs
                 .get(&self.state.cur_output)
-                .ok_or(anyhow!("save_screenshot: Invalid current output key"))?;
+                .ok_or_else(|| anyhow!("save_screenshot: Invalid current output key"))?;
             if let Some(pf) = &output.rendered_frame {
                 let pf = pf.read();
 
@@ -518,7 +521,7 @@ impl VSPreviewer {
 
             let path_str = save_path
                 .to_str()
-                .ok_or(anyhow!("Invalid UTF-8 save path"))?;
+                .ok_or_else(|| anyhow!("Invalid UTF-8 save path"))?;
 
             script.send_debug_message(format!("Screenshot saved to {}", path_str))?;
         } else {
@@ -573,11 +576,11 @@ impl VSPreviewer {
         let old = self
             .outputs
             .get(&old_output)
-            .ok_or(anyhow!("output_needs_rerender: Invalid new output key"))?;
+            .ok_or_else(|| anyhow!("output_needs_rerender: Invalid new output key"))?;
         let new = self
             .outputs
             .get(&self.state.cur_output)
-            .ok_or(anyhow!("output_needs_rerender: Invalid current output key"))?;
+            .ok_or_else(|| anyhow!("output_needs_rerender: Invalid current output key"))?;
 
         // Update translate values
         let new_node = &new.vsoutput.node_info;
@@ -607,9 +610,9 @@ impl VSPreviewer {
         }
 
         let info = {
-            let output = self.outputs.get(&self.state.cur_output).ok_or(anyhow!(
-                "correct_translate_for_current_output: Invalid current output key"
-            ))?;
+            let output = self.outputs.get(&self.state.cur_output).ok_or_else(|| {
+                anyhow!("correct_translate_for_current_output: Invalid current output key")
+            })?;
             output.vsoutput.node_info.clone()
         };
 
@@ -664,11 +667,11 @@ impl VSPreviewer {
     }
 
     // Can only be called when an output is selected
-    pub fn fetch_original_props(&mut self, frame: &epi::Frame) {
+    pub fn fetch_original_props(&mut self, ctx: &egui::Context) {
         let cur_output = self.state.cur_output;
         let cur_frame_no = self.state.cur_frame_no;
 
-        let frame = frame.clone();
+        let ctx = ctx.clone();
         let script = self.script.clone();
 
         if let Some(mut promise_mutex) = self.original_props_promise.try_lock() {
@@ -683,7 +686,7 @@ impl VSPreviewer {
                     script_mutex.add_vs_error(&props_res);
 
                     if let Ok(props) = props_res {
-                        frame.request_repaint();
+                        ctx.request_repaint();
 
                         Some(props)
                     } else {
@@ -702,9 +705,12 @@ impl VSPreviewer {
         if let Some(mut mutex) = self.original_props_promise.try_lock() {
             if let Some(promise) = &*mutex {
                 if let Some(props) = promise.ready() {
-                    let output = self.outputs.get_mut(&self.state.cur_output).ok_or(anyhow!(
-                        "check_original_props_finish: Invalid current output key"
-                    ))?;
+                    let output = self
+                        .outputs
+                        .get_mut(&self.state.cur_output)
+                        .ok_or_else(|| {
+                            anyhow!("check_original_props_finish: Invalid current output key")
+                        })?;
                     output.original_props = *props;
 
                     *mutex = None;
@@ -715,7 +721,12 @@ impl VSPreviewer {
         Ok(())
     }
 
-    pub fn check_misc_keyboard_inputs(&mut self, frame: &epi::Frame, ui: &mut egui::Ui) {
+    pub fn check_misc_keyboard_inputs(
+        &mut self,
+        ctx: &egui::Context,
+        frame: &epi::Frame,
+        ui: &mut egui::Ui,
+    ) {
         // Don't allow quit when inputs are still focused
         if !self.any_input_focused() {
             if ui.input().key_pressed(Key::Q) || ui.input().key_pressed(Key::Escape) {
@@ -728,7 +739,7 @@ impl VSPreviewer {
                     self.inputs_focused.clear();
                 }
             } else if ui.input().key_pressed(Key::R) {
-                self.reload(frame.clone())
+                self.reload(ctx.clone())
             } else if ui.input().modifiers.ctrl
                 && ui.input().modifiers.shift
                 && ui.input().key_pressed(Key::C)
@@ -769,11 +780,7 @@ impl VSPreviewer {
         }
     }
 
-    pub fn check_promise_callbacks(
-        &mut self,
-        ctx: &egui::Context,
-        frame: &epi::Frame,
-    ) -> Result<()> {
+    pub fn check_promise_callbacks(&mut self, ctx: &egui::Context) -> Result<()> {
         // Initial callback
         self.check_reload_finish()?;
 
@@ -783,11 +790,11 @@ impl VSPreviewer {
         // Check for original props if requested
         self.check_original_props_finish()?;
 
-        self.check_misc_finish(frame);
+        self.check_misc_finish(ctx);
 
         // We want a new frame
         // Previously rendering frames must have completed to request a new one
-        self.try_rerender(frame)?;
+        self.try_rerender(ctx)?;
 
         Ok(())
     }
@@ -812,9 +819,9 @@ impl VSPreviewer {
         }
     }
 
-    pub fn change_script_file(&mut self, frame: &epi::Frame) {
+    pub fn change_script_file(&mut self, ctx: &egui::Context) {
         let script = self.script.clone();
-        let frame = frame.clone();
+        let ctx = ctx.clone();
 
         if let Some(mut promise_mutex) = self.misc_promise.try_lock() {
             let promise = Promise::spawn_thread("change_script", move || {
@@ -830,7 +837,7 @@ impl VSPreviewer {
                     let mut script_mutex = script.lock();
 
                     script_mutex.change_script_path(new_file);
-                    frame.request_repaint();
+                    ctx.request_repaint();
 
                     ReloadType::Reload
                 } else {
@@ -842,7 +849,7 @@ impl VSPreviewer {
         }
     }
 
-    pub fn check_misc_finish(&mut self, frame: &epi::Frame) {
+    pub fn check_misc_finish(&mut self, ctx: &egui::Context) {
         let mut reload_type = None;
 
         if let Some(mutex) = self.misc_promise.try_lock() {
@@ -856,7 +863,7 @@ impl VSPreviewer {
         // Reload handles the promise reset, to avoid rendering other frames
         if let Some(reload_type) = reload_type {
             match reload_type {
-                ReloadType::Reload => self.reload(frame.clone()),
+                ReloadType::Reload => self.reload(ctx.clone()),
                 ReloadType::Reprocess => {
                     self.reprocess_outputs(true, false);
                     *self.misc_promise.lock() = None;
@@ -874,8 +881,8 @@ impl VSPreviewer {
         }
     }
 
-    pub fn change_icc_profile(&mut self, frame: &epi::Frame) {
-        let frame = frame.clone();
+    pub fn change_icc_profile(&mut self, ctx: &egui::Context) {
+        let ctx = ctx.clone();
         let transforms = self.transforms.clone();
 
         if let Some(mut promise_mutex) = self.misc_promise.try_lock() {
@@ -893,7 +900,7 @@ impl VSPreviewer {
 
                     transforms.icc = Some(profile);
 
-                    frame.request_repaint();
+                    ctx.request_repaint();
 
                     ReloadType::Reprocess
                 } else {

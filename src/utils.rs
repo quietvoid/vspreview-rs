@@ -61,8 +61,10 @@ pub fn resize_fast(
     dst_height: u32,
     filter_type: fr::FilterType,
 ) -> Result<DynamicImage> {
-    let width = NonZeroU32::new(img.width()).ok_or(anyhow!("resize_fast: Invalid img width"))?;
-    let height = NonZeroU32::new(img.height()).ok_or(anyhow!("resize_fast: Invalid img height"))?;
+    let width =
+        NonZeroU32::new(img.width()).ok_or_else(|| anyhow!("resize_fast: Invalid img width"))?;
+    let height =
+        NonZeroU32::new(img.height()).ok_or_else(|| anyhow!("resize_fast: Invalid img height"))?;
 
     let src_image = match img {
         DynamicImage::ImageLuma8(luma) => {
@@ -75,8 +77,9 @@ pub fn resize_fast(
     };
 
     let mut dst_image = fr::Image::new(
-        NonZeroU32::new(dst_width).ok_or(anyhow!("resize_fast: Invalid dst img width"))?,
-        NonZeroU32::new(dst_height).ok_or(anyhow!("resize_fast: Invalid dst img height"))?,
+        NonZeroU32::new(dst_width).ok_or_else(|| anyhow!("resize_fast: Invalid dst img width"))?,
+        NonZeroU32::new(dst_height)
+            .ok_or_else(|| anyhow!("resize_fast: Invalid dst img height"))?,
         src_image.pixel_type(),
     );
     let mut dst_view = dst_image.view_mut();
@@ -87,11 +90,11 @@ pub fn resize_fast(
     let resized_img = match dst_image.pixel_type() {
         fr::PixelType::U8 => DynamicImage::ImageLuma8(
             image::ImageBuffer::from_raw(dst_width, dst_height, dst_image.buffer().to_vec())
-                .ok_or(anyhow!("Failed resizing luma"))?,
+                .ok_or_else(|| anyhow!("Failed resizing luma"))?,
         ),
         fr::PixelType::U8x3 => DynamicImage::ImageRgb8(
             image::ImageBuffer::from_raw(dst_width, dst_height, dst_image.buffer().to_vec())
-                .ok_or(anyhow!("Failed resizing RGB"))?,
+                .ok_or_else(|| anyhow!("Failed resizing RGB"))?,
         ),
         _ => unreachable!(),
     };

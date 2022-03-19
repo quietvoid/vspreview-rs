@@ -1,6 +1,5 @@
 use super::{
-    egui, egui::RichText, epi, update_input_key_state, PreviewFilterType, VSPreviewer,
-    STATE_LABEL_COLOR,
+    egui, egui::RichText, update_input_key_state, PreviewFilterType, VSPreviewer, STATE_LABEL_COLOR,
 };
 
 use crate::vs_handler::{VSDitherAlgo, VSResizer};
@@ -8,12 +7,12 @@ use crate::vs_handler::{VSDitherAlgo, VSResizer};
 pub struct UiPreferences {}
 
 impl UiPreferences {
-    pub fn ui(pv: &mut VSPreviewer, frame: &epi::Frame, ui: &mut egui::Ui) {
+    pub fn ui(pv: &mut VSPreviewer, ctx: &egui::Context, ui: &mut egui::Ui) {
         let header = RichText::new("Preferences").color(STATE_LABEL_COLOR);
 
         egui::CollapsingHeader::new(header).show(ui, |ui| {
             Self::pref_grid(pv, ui);
-            Self::transforms_ui(pv, ui, frame);
+            Self::transforms_ui(pv, ui, ctx);
         });
     }
 
@@ -176,7 +175,7 @@ impl UiPreferences {
         }
     }
 
-    fn transforms_ui(pv: &mut VSPreviewer, ui: &mut egui::Ui, frame: &epi::Frame) {
+    fn transforms_ui(pv: &mut VSPreviewer, ui: &mut egui::Ui, ctx: &egui::Context) {
         let mut profile_name = String::from("None");
         if let Some(t) = pv.transforms.try_lock() {
             if let Some(icc) = &t.icc {
@@ -208,7 +207,7 @@ impl UiPreferences {
                     ui.end_row();
 
                     if icc_button.clicked() {
-                        pv.change_icc_profile(frame);
+                        pv.change_icc_profile(ctx);
                     }
 
                     if profile_name.len() > 50 {

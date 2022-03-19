@@ -2,7 +2,7 @@ use super::{update_input_key_state, PreviewFilterType, VSPreviewer, MAX_ZOOM, MI
 use anyhow::Result;
 use eframe::{
     egui::{self, RichText},
-    epaint, epi,
+    epaint,
 };
 
 mod bottom_panel;
@@ -28,18 +28,13 @@ const STATE_LABEL_COLOR: epaint::Color32 = epaint::Color32::from_gray(160);
 pub struct PreviewerMainUi {}
 
 impl PreviewerMainUi {
-    pub fn ui(
-        pv: &mut VSPreviewer,
-        ctx: &egui::Context,
-        frame: &epi::Frame,
-        ui: &mut egui::Ui,
-    ) -> Result<()> {
+    pub fn ui(pv: &mut VSPreviewer, ctx: &egui::Context, ui: &mut egui::Ui) -> Result<()> {
         let cur_output = pv.state.cur_output;
         let has_current_output = !pv.outputs.is_empty() && pv.outputs.contains_key(&cur_output);
 
         // Draw window on top
         if pv.state.show_gui {
-            UiStateWindow::ui(pv, ctx, frame);
+            UiStateWindow::ui(pv, ctx);
         }
 
         // Centered image painted on
@@ -50,7 +45,7 @@ impl PreviewerMainUi {
                 .color(STATE_LABEL_COLOR);
 
             if ui.button(change_script_text).clicked() {
-                pv.change_script_file(frame);
+                pv.change_script_file(ctx);
                 ui.close_menu();
             }
         });
@@ -61,7 +56,7 @@ impl PreviewerMainUi {
         }
 
         // Check at the end of frame for reprocessing
-        pv.try_rerender(frame)?;
+        pv.try_rerender(ctx)?;
 
         Ok(())
     }

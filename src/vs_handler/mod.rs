@@ -73,7 +73,7 @@ impl PreviewedScript {
         };
 
         if self.message_handler_id.is_none() {
-            let api = API::get().ok_or(anyhow!("Couldn't retrieve API object"))?;
+            let api = API::get().ok_or_else(|| anyhow!("Couldn't retrieve API object"))?;
 
             let vserrors = self.vs_messages.clone();
             let id = api.add_message_handler(move |message_type, message| {
@@ -127,7 +127,7 @@ impl PreviewedScript {
         let env = self
             .env
             .as_ref()
-            .ok_or(anyhow!("Cannot request VS frame without environment"))?;
+            .ok_or_else(|| anyhow!("Cannot request VS frame without environment"))?;
 
         let (mut node, _alpha) = env.get_output(output)?;
 
@@ -137,7 +137,8 @@ impl PreviewedScript {
             .get_plugin_by_id("com.vapoursynth.resize")?
             .unwrap();
 
-        let mut args = OwnedMap::new(API::get().ok_or(anyhow!("Couldn't initialize VS API"))?);
+        let mut args =
+            OwnedMap::new(API::get().ok_or_else(|| anyhow!("Couldn't initialize VS API"))?);
         args.set_node("clip", &node)?;
 
         if let Property::Constant(f) = node.info().format {
@@ -195,7 +196,7 @@ impl PreviewedScript {
         let env = self
             .env
             .as_ref()
-            .ok_or(anyhow!("Cannot request VS frame without environment"))?;
+            .ok_or_else(|| anyhow!("Cannot request VS frame without environment"))?;
 
         let (node, _alpha) = env.get_output(output)?;
         let frame = node.get_frame(frame_no as usize)?;

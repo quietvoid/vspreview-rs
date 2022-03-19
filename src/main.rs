@@ -1,11 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-use std::env;
-use std::path::PathBuf;
-use std::sync::Arc;
-
 use clap::Parser;
 use parking_lot::Mutex;
+use std::{path::PathBuf, sync::Arc};
 
 mod app;
 mod utils;
@@ -23,6 +20,7 @@ struct Opt {
 
 fn main() {
     let options = eframe::NativeOptions::default();
+
     let opt = Opt::parse();
 
     let previewer = VSPreviewer {
@@ -30,5 +28,9 @@ fn main() {
         ..Default::default()
     };
 
-    eframe::run_native(Box::new(previewer), options);
+    eframe::run_native(
+        "vspreview-rs",
+        options,
+        Box::new(|cc| Box::new(previewer.with_cc(cc))),
+    );
 }
