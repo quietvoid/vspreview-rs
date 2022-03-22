@@ -1,7 +1,8 @@
 use super::{update_input_key_state, PreviewFilterType, VSPreviewer, MAX_ZOOM, MIN_ZOOM};
 use anyhow::Result;
 use eframe::{
-    egui::{self, RichText},
+    egui::{self, Layout, RichText},
+    emath::{Align, Align2, Vec2},
     epaint,
 };
 
@@ -44,8 +45,15 @@ impl PreviewerMainUi {
                 .size(18.0)
                 .color(STATE_LABEL_COLOR);
 
+            let about_text = RichText::new("About").size(18.0).color(STATE_LABEL_COLOR);
+
             if ui.button(change_script_text).clicked() {
                 pv.change_script_file(ctx);
+                ui.close_menu();
+            }
+
+            if ui.button(about_text).clicked() {
+                pv.about_window_open = true;
                 ui.close_menu();
             }
         });
@@ -54,6 +62,32 @@ impl PreviewerMainUi {
         if pv.state.show_gui && has_current_output {
             UiBottomPanel::ui(pv, ctx)?;
         }
+
+        // About window
+        egui::Window::new("About")
+            .open(&mut pv.about_window_open)
+            .resizable(false)
+            .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
+            .show(ctx, |ui| {
+                ui.with_layout(Layout::top_down(Align::Center), |ui| {
+                    ui.heading("vspreview-rs");
+                    ui.label("Minimal and functional VapourSynth script previewer");
+
+                    ui.separator();
+
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 0.0;
+
+                        ui.label("Built on top of ");
+                        ui.hyperlink_to("egui", "https://github.com/emilk/egui");
+                        ui.label(" and ");
+                        ui.hyperlink_to(
+                            "vapoursynth-rs",
+                            "https://github.com/YaLTeR/vapoursynth-rs",
+                        );
+                    });
+                });
+            });
 
         // Check at the end of frame for reprocessing
         pv.try_rerender(ctx)?;

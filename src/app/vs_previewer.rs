@@ -17,6 +17,7 @@ pub struct VSPreviewer {
     pub script: Arc<Mutex<PreviewedScript>>,
     pub state: PreviewState,
     pub errors: HashMap<&'static str, Vec<String>>,
+    pub about_window_open: bool,
 
     /// Promise returning the newly reloaded outputs
     pub reload_data: Option<ReloadPromise>,
