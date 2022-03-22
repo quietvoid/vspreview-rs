@@ -8,12 +8,12 @@ impl UiBottomPanel {
         let output = pv
             .outputs
             .get_mut(&pv.state.cur_output)
-            .ok_or(anyhow!("UiBottomPanel::ui: Invalid current output key"))?;
+            .ok_or_else(|| anyhow!("UiBottomPanel::ui: Invalid current output key"))?;
         let node_info = &output.vsoutput.node_info;
 
         let transparent_frame = egui::Frame::default()
             .fill(Color32::from_black_alpha(96))
-            .margin(egui::style::Margin {
+            .inner_margin(egui::style::Margin {
                 left: 20.0,
                 right: 20.0,
                 top: 10.0,

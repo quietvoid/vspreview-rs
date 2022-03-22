@@ -14,19 +14,10 @@ pub struct SavedState {
     transforms: PreviewTransforms,
 }
 
-impl epi::App for VSPreviewer {
-    fn name(&self) -> &str {
-        "vspreview-rs"
-    }
-
-    fn setup(
-        &mut self,
-        ctx: &egui::Context,
-        frame: &epi::Frame,
-        _storage: Option<&dyn epi::Storage>,
-    ) {
+impl VSPreviewer {
+    pub fn with_cc(mut self, cc: &eframe::CreationContext) -> Self {
         // Load existing or default state
-        if let Some(storage) = _storage {
+        if let Some(storage) = cc.storage {
             let saved_state: SavedState = epi::get_value(storage, epi::APP_KEY).unwrap_or_default();
 
             self.state = saved_state.preview_state;
@@ -36,7 +27,7 @@ impl epi::App for VSPreviewer {
         // Set the global theme, default to dark mode
         let mut global_visuals = egui::style::Visuals::dark();
         global_visuals.window_shadow = egui::epaint::Shadow::small_light();
-        ctx.set_visuals(global_visuals);
+        cc.egui_ctx.set_visuals(global_visuals);
 
         // Fix invalid state options
         if self.state.scroll_multiplier <= 0.0 {
@@ -53,23 +44,27 @@ impl epi::App for VSPreviewer {
         self.init_transforms();
 
         // Request initial outputs
-        self.reload(frame.clone());
-    }
+        self.reload(cc.egui_ctx.clone());
 
+        self
+    }
+}
+
+impl eframe::App for VSPreviewer {
     fn update(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
-        let promise_res = self.check_promise_callbacks(ctx, frame);
+        let promise_res = self.check_promise_callbacks(ctx);
         self.add_error("callbacks", &promise_res);
 
         let panel_frame = Frame::default()
             .fill(Color32::from_gray(51))
-            .margin(Margin::same(self.state.canvas_margin))
+            .inner_margin(Margin::same(self.state.canvas_margin))
             .stroke(Stroke::none());
 
         egui::CentralPanel::default()
             .frame(panel_frame)
             .show(ctx, |ui| {
                 // Check for quit, GUI toggle, reload, etc.
-                self.check_misc_keyboard_inputs(frame, ui);
+                self.check_misc_keyboard_inputs(ctx, frame, ui);
 
                 // React on canvas resolution change
                 if self.available_size != ui.available_size() {
@@ -81,7 +76,7 @@ impl epi::App for VSPreviewer {
                     self.reprocess_outputs(true, translate_changed);
                 }
 
-                let preview_res = PreviewerMainUi::ui(self, ctx, frame, ui);
+                let preview_res = PreviewerMainUi::ui(self, ctx, ui);
                 self.add_error("preview", &preview_res);
 
                 // Display errors if any

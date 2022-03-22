@@ -18,11 +18,11 @@ impl UiPreviewImage {
             let cur_output = pv
                 .outputs
                 .get(&cur_output)
-                .ok_or(anyhow!("UiPreviewImage::ui: Invalid current output key"))?;
+                .ok_or_else(|| anyhow!("UiPreviewImage::ui: Invalid current output key"))?;
             let last_output = pv
                 .outputs
                 .get(&pv.last_output_key)
-                .ok_or(anyhow!("UiPreviewImage::ui: Invalid last output key"))?;
+                .ok_or_else(|| anyhow!("UiPreviewImage::ui: Invalid last output key"))?;
 
             last_output.last_frame_no != cur_output.last_frame_no
         } else {
@@ -34,9 +34,9 @@ impl UiPreviewImage {
 
         // Acquire frame texture to render now
         let preview_frame = if has_current_output {
-            let output = pv.outputs.get(&cur_output).ok_or(anyhow!(
-                "UiPreviewImage::ui preview_frame: Invalid current output key"
-            ))?;
+            let output = pv.outputs.get(&cur_output).ok_or_else(|| {
+                anyhow!("UiPreviewImage::ui preview_frame: Invalid current output key")
+            })?;
 
             if output_diff_frame {
                 None
@@ -150,7 +150,7 @@ impl UiPreviewImage {
         let output = pv
             .outputs
             .get_mut(&pv.state.cur_output)
-            .ok_or(anyhow!("check_update_seek: Invalid current output key"))?;
+            .ok_or_else(|| anyhow!("check_update_seek: Invalid current output key"))?;
         let node_info = &output.vsoutput.node_info;
 
         let current = pv.state.cur_frame_no;

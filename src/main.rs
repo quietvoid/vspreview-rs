@@ -1,11 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-use std::env;
-use std::path::PathBuf;
-use std::sync::Arc;
-
+use anyhow::{bail, Result};
 use clap::Parser;
 use parking_lot::Mutex;
+use std::{path::PathBuf, sync::Arc};
 
 mod app;
 mod utils;
@@ -21,14 +19,23 @@ struct Opt {
     input: PathBuf,
 }
 
-fn main() {
+fn main() -> Result<()> {
     let options = eframe::NativeOptions::default();
+
     let opt = Opt::parse();
+
+    if !opt.input.is_file() {
+        bail!("Input script file does not exist!");
+    }
 
     let previewer = VSPreviewer {
         script: Arc::new(Mutex::new(PreviewedScript::new(opt.input))),
         ..Default::default()
     };
 
-    eframe::run_native(Box::new(previewer), options);
+    eframe::run_native(
+        "vspreview-rs",
+        options,
+        Box::new(|cc| Box::new(previewer.with_cc(cc))),
+    );
 }

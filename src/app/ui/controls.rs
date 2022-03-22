@@ -48,7 +48,7 @@ impl UiControls {
             let out = pv
                 .outputs
                 .get_mut(&old_output)
-                .ok_or(anyhow!("output_select_ui: Invalid old output key"))?;
+                .ok_or_else(|| anyhow!("output_select_ui: Invalid old output key"))?;
             out.original_props = None;
 
             if pv.output_needs_rerender(old_output)? {
