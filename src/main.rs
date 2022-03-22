@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
+use anyhow::{bail, Result};
 use clap::Parser;
 use parking_lot::Mutex;
 use std::{path::PathBuf, sync::Arc};
@@ -18,10 +19,14 @@ struct Opt {
     input: PathBuf,
 }
 
-fn main() {
+fn main() -> Result<()> {
     let options = eframe::NativeOptions::default();
 
     let opt = Opt::parse();
+
+    if !opt.input.is_file() {
+        bail!("Input script file does not exist!");
+    }
 
     let previewer = VSPreviewer {
         script: Arc::new(Mutex::new(PreviewedScript::new(opt.input))),
