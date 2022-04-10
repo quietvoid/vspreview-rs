@@ -51,7 +51,7 @@ impl VSPreviewer {
 }
 
 impl eframe::App for VSPreviewer {
-    fn update(&mut self, ctx: &egui::Context, frame: &epi::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut epi::Frame) {
         let promise_res = self.check_promise_callbacks(ctx);
         self.add_error("callbacks", &promise_res);
 

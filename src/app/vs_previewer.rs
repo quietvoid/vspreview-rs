@@ -725,7 +725,7 @@ impl VSPreviewer {
     pub fn check_misc_keyboard_inputs(
         &mut self,
         ctx: &egui::Context,
-        frame: &epi::Frame,
+        frame: &mut epi::Frame,
         ui: &mut egui::Ui,
     ) {
         // Don't allow quit when inputs are still focused
