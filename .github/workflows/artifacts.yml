@@ -17,9 +17,9 @@ jobs:
       fail-fast: false
 
       matrix:
-        build: [windows]
+        build: [Windows]
         include:
-          - build: windows
+          - build: Windows
             os: windows-latest
             rust: stable
 
@@ -38,8 +38,13 @@ jobs:
         run: |
           echo "RELEASE_PKG_VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)" >> $GITHUB_ENV
 
+      - name: Install VapourSynth (Windows)
+        if: matrix.arch == 'x86_64'
+        run: |
+          build/win64-vs-setup.ps1
+
       - name: Build (Windows)
-        if: matrix.build == 'windows'
+        if: matrix.build == 'Windows'
         run: |
           $Env:Path += ";C:\Program Files\VapourSynth;"
           cargo build --release
