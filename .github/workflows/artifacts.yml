@@ -39,9 +39,7 @@ jobs:
           echo "RELEASE_PKG_VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)" >> $GITHUB_ENV
 
       - name: Install VapourSynth (Windows)
-        if: matrix.arch == 'x86_64'
-        run: |
-          build/win64-vs-setup.ps1
+        run: build/win64-vs-setup.ps1
 
       - name: Build (Windows)
         if: matrix.build == 'Windows'
