@@ -1,9 +1,6 @@
 use eframe::egui::style::Margin;
+use eframe::egui::{self, Frame};
 use eframe::epaint::{Color32, Stroke};
-use eframe::{
-    egui::{self, Frame},
-    epi,
-};
 
 use super::*;
 
@@ -18,7 +15,8 @@ impl VSPreviewer {
     pub fn with_cc(mut self, cc: &eframe::CreationContext) -> Self {
         // Load existing or default state
         if let Some(storage) = cc.storage {
-            let saved_state: SavedState = epi::get_value(storage, epi::APP_KEY).unwrap_or_default();
+            let saved_state: SavedState =
+                eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
 
             self.state = saved_state.preview_state;
             self.transforms = Arc::new(Mutex::new(saved_state.transforms));
@@ -51,7 +49,7 @@ impl VSPreviewer {
 }
 
 impl eframe::App for VSPreviewer {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut epi::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         let promise_res = self.check_promise_callbacks(ctx);
         self.add_error("callbacks", &promise_res);
 
@@ -86,12 +84,12 @@ impl eframe::App for VSPreviewer {
             });
     }
 
-    fn save(&mut self, storage: &mut dyn epi::Storage) {
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
         let saved_state = SavedState {
             preview_state: self.state,
             transforms: self.transforms.lock().clone(),
         };
 
-        epi::set_value(storage, epi::APP_KEY, &saved_state);
+        eframe::set_value(storage, eframe::APP_KEY, &saved_state);
     }
 }

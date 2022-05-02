@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Result};
+use eframe::egui;
 use eframe::egui::Key;
-use eframe::{egui, epi};
 use fast_image_resize as fir;
 use image::DynamicImage;
 use parking_lot::{Mutex, RwLock};
@@ -725,7 +725,7 @@ impl VSPreviewer {
     pub fn check_misc_keyboard_inputs(
         &mut self,
         ctx: &egui::Context,
-        frame: &mut epi::Frame,
+        frame: &mut eframe::Frame,
         ui: &mut egui::Ui,
     ) {
         // Don't allow quit when inputs are still focused
