@@ -1,7 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
 use anyhow::{bail, Result};
-use clap::Parser;
+use clap::{Parser, ValueHint};
 use parking_lot::Mutex;
 use std::{path::PathBuf, sync::Arc};
 
@@ -15,7 +15,7 @@ use vs_handler::PreviewedScript;
 #[derive(Parser, Debug)]
 #[clap(name = env!("CARGO_PKG_NAME"), about = "VapourSynth script previewer", author = "quietvoid", version = env!("CARGO_PKG_VERSION"))]
 struct Opt {
-    #[clap(name = "input", parse(from_os_str))]
+    #[clap(name = "input", value_hint = ValueHint::FilePath)]
     input: PathBuf,
 }
 
