@@ -13,10 +13,22 @@ pub enum PreviewFilterType {
     Lanczos3,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, serde::Deserialize, serde::Serialize)]
+pub enum PreviewTextureFilterType {
+    Linear,
+    Nearest,
+}
+
 /// Filter type to use with fast_image_resize
 impl Default for PreviewFilterType {
     fn default() -> Self {
         Self::Gpu
+    }
+}
+
+impl Default for PreviewTextureFilterType {
+    fn default() -> Self {
+        Self::Linear
     }
 }
 
@@ -35,6 +47,15 @@ impl From<&PreviewFilterType> for fir::FilterType {
     }
 }
 
+impl From<&PreviewTextureFilterType> for eframe::egui::TextureFilter {
+    fn from(f: &PreviewTextureFilterType) -> Self {
+        match f {
+            PreviewTextureFilterType::Linear => eframe::egui::TextureFilter::Linear,
+            PreviewTextureFilterType::Nearest => eframe::egui::TextureFilter::Nearest,
+        }
+    }
+}
+
 impl Display for PreviewFilterType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let val = match self {
@@ -45,6 +66,17 @@ impl Display for PreviewFilterType {
             PreviewFilterType::CatmullRom => "CatmullRom",
             PreviewFilterType::Mitchell => "Mitchell",
             PreviewFilterType::Lanczos3 => "Lanczos3",
+        };
+
+        f.write_str(val)
+    }
+}
+
+impl Display for PreviewTextureFilterType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let val = match self {
+            PreviewTextureFilterType::Linear => "Linear",
+            PreviewTextureFilterType::Nearest => "Nearest",
         };
 
         f.write_str(val)

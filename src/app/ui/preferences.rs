@@ -2,7 +2,10 @@ use super::{
     egui, egui::RichText, update_input_key_state, PreviewFilterType, VSPreviewer, STATE_LABEL_COLOR,
 };
 
-use crate::vs_handler::{VSDitherAlgo, VSResizer};
+use crate::{
+    app::preview_filter_type::PreviewTextureFilterType,
+    vs_handler::{VSDitherAlgo, VSResizer},
+};
 
 pub struct UiPreferences {}
 
@@ -21,6 +24,7 @@ impl UiPreferences {
         let old_enable_dithering = pv.state.frame_transform_opts.enable_dithering;
         let old_dither_algo = pv.state.frame_transform_opts.dither_algo;
 
+        let old_texture_filter = pv.state.texture_filter;
         let old_upscale_flag = pv.state.upscale_to_window;
         let old_upsampling_filter = pv.state.upsampling_filter;
         let old_fit_window_flag = pv.state.fit_to_window;
@@ -70,6 +74,29 @@ impl UiPreferences {
                 ui.checkbox(&mut pv.state.fit_to_window, "Fit image to window");
                 ui.end_row();
 
+                if pv.state.upscale_to_window || pv.state.fit_to_window {
+                    let new_texture_filter = &mut pv.state.texture_filter;
+
+                    ui.label(RichText::new("Texture filter").color(STATE_LABEL_COLOR))
+                        .on_hover_text("Filter to use when scaling the texture (GPU)");
+
+                    egui::ComboBox::from_id_source(egui::Id::new("texture_filter_select"))
+                        .selected_text(new_texture_filter.to_string())
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(
+                                new_texture_filter,
+                                PreviewTextureFilterType::Linear,
+                                PreviewTextureFilterType::Linear.to_string(),
+                            );
+                            ui.selectable_value(
+                                new_texture_filter,
+                                PreviewTextureFilterType::Nearest,
+                                PreviewTextureFilterType::Nearest.to_string(),
+                            );
+                        });
+                    ui.end_row();
+                }
+
                 if pv.state.upscale_to_window {
                     let new_upsampling_filter = &mut pv.state.upsampling_filter;
 
@@ -80,37 +107,37 @@ impl UiPreferences {
                             ui.selectable_value(
                                 new_upsampling_filter,
                                 PreviewFilterType::Gpu,
-                                "GPU",
+                                PreviewFilterType::Gpu.to_string(),
                             );
                             ui.selectable_value(
                                 new_upsampling_filter,
                                 PreviewFilterType::Point,
-                                "Point",
+                                PreviewFilterType::Point.to_string(),
                             );
                             ui.selectable_value(
                                 new_upsampling_filter,
                                 PreviewFilterType::Bilinear,
-                                "Bilinear",
+                                PreviewFilterType::Bilinear.to_string(),
                             );
                             ui.selectable_value(
                                 new_upsampling_filter,
                                 PreviewFilterType::Hamming,
-                                "Hamming",
+                                PreviewFilterType::Hamming.to_string(),
                             );
                             ui.selectable_value(
                                 new_upsampling_filter,
                                 PreviewFilterType::CatmullRom,
-                                "CatmullRom",
+                                PreviewFilterType::CatmullRom.to_string(),
                             );
                             ui.selectable_value(
                                 new_upsampling_filter,
                                 PreviewFilterType::Mitchell,
-                                "Mitchell",
+                                PreviewFilterType::Mitchell.to_string(),
                             );
                             ui.selectable_value(
                                 new_upsampling_filter,
                                 PreviewFilterType::Lanczos3,
-                                "Lanczos3",
+                                PreviewFilterType::Lanczos3.to_string(),
                             );
                         });
                     ui.end_row();
@@ -170,6 +197,7 @@ impl UiPreferences {
         } else if pv.state.upscale_to_window != old_upscale_flag
             || pv.state.upsampling_filter != old_upsampling_filter
             || pv.state.fit_to_window != old_fit_window_flag
+            || pv.state.texture_filter != old_texture_filter
         {
             pv.reprocess_outputs(true, false);
         }

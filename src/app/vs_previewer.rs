@@ -378,14 +378,16 @@ impl VSPreviewer {
                         let colorimage = image_to_colorimage(final_image, &self.state, &transforms);
 
                         // Update texture on render done
-                        // TODO: Support choosable texture filter
                         if let Some(ref mut tex) = *tex_mutex {
-                            tex.set(colorimage, egui::TextureFilter::Nearest);
+                            tex.set(
+                                colorimage,
+                                egui::TextureFilter::from(&self.state.texture_filter),
+                            );
                         } else {
                             *tex_mutex = Some(ctx.load_texture(
                                 "frame",
                                 colorimage,
-                                egui::TextureFilter::Nearest,
+                                egui::TextureFilter::from(&self.state.texture_filter),
                             ));
                         }
 

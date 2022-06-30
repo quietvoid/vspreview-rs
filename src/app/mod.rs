@@ -13,7 +13,7 @@ mod vs_previewer;
 
 use ui::*;
 
-use preview_filter_type::PreviewFilterType;
+use preview_filter_type::{PreviewFilterType, PreviewTextureFilterType};
 pub use vs_previewer::VSPreviewer;
 
 use super::vs_handler::{vstransform, PreviewedScript, VSFrame, VSFrameProps, VSOutput};
@@ -54,6 +54,8 @@ pub struct PreviewState {
 
     pub frame_transform_opts: VSTransformOptions,
 
+    /// Texture filter (for GPU scaling)
+    pub texture_filter: PreviewTextureFilterType,
     // Only upscales
     pub upscale_to_window: bool,
     /// Defaults to Point for performance
@@ -130,6 +132,7 @@ impl Default for PreviewState {
             upscale_to_window: Default::default(),
             upsampling_filter: Default::default(),
             icc_enabled: Default::default(),
+            texture_filter: Default::default(),
         }
     }
 }
