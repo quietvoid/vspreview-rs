@@ -120,7 +120,7 @@ impl UiFrameProps {
                         }
 
                         ui.label("");
-                        ui.with_layout(egui::Layout::right_to_left(), |ui| {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             let reload_btn = ui.button("Reload original props");
 
                             if reload_btn.clicked() {

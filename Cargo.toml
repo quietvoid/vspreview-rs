@@ -8,19 +8,19 @@ license = "GPL-3.0"
 
 [dependencies]
 anyhow = "1.0.58"
-clap = { version = "3.2.6", features = ["derive", "wrap_help", "deprecated"] }
+clap = { version = "3.2.15", features = ["derive", "wrap_help", "deprecated"] }
 eframe = { git = "https://github.com/emilk/egui.git", features = ["persistence"] }
-fast_image_resize = "0.9.5"
-image = { version = "0.24.2", default_features = false, features = ["png"] }
+fast_image_resize = "1.0.0"
+image = { version = "0.24.3", default-features = false, features = ["png"] }
 itertools = "0.10.3"
 lcms2 = "5.4.1"
 num_enum = "0.5.7"
 parking_lot = "0.12.1"
 poll-promise = "0.1.0"
-rfd = "0.9.1"
-serde_derive = "1.0.137"
-serde = "1.0.137"
-vapoursynth = { git = "https://github.com/YaLTeR/vapoursynth-rs.git", features = ["vapoursynth-api-36", "vapoursynth-functions", "vsscript-api-32", "vsscript-functions"] }
+rfd = "0.10.0"
+serde_derive = "1.0.140"
+serde = "1.0.140"
+vapoursynth = { version = "0.4.0", features = ["vapoursynth-api-36", "vapoursynth-functions", "vsscript-api-32", "vsscript-functions"] }
 
 [[bin]]
 name = "vspreview-rs"
