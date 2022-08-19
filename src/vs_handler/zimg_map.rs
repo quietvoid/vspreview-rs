@@ -4,7 +4,7 @@ use std::fmt::Display;
 use num_enum::FromPrimitive;
 
 // Color range
-#[derive(Debug, Clone, Copy, PartialEq, FromPrimitive, num_enum::Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, num_enum::Default)]
 #[repr(u8)]
 pub enum VSColorRange {
     Full = 0,
@@ -14,7 +14,7 @@ pub enum VSColorRange {
 }
 
 // Mapping zimg color matrices
-#[derive(Debug, Clone, Copy, PartialEq, FromPrimitive, num_enum::Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, num_enum::Default)]
 #[repr(u8)]
 pub enum VSMatrix {
     Rgb = 0,
@@ -36,7 +36,7 @@ pub enum VSMatrix {
 }
 
 // Mapping zimg transfer characteristics
-#[derive(Debug, Clone, Copy, PartialEq, FromPrimitive, num_enum::Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, num_enum::Default)]
 #[repr(u8)]
 pub enum VSTransferCharacteristics {
     Reserved0 = 0,
@@ -62,7 +62,7 @@ pub enum VSTransferCharacteristics {
 }
 
 // Primaries
-#[derive(Debug, Clone, Copy, PartialEq, FromPrimitive, num_enum::Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, num_enum::Default)]
 #[repr(u8)]
 pub enum VSPrimaries {
     Reserved0 = 0,
@@ -91,7 +91,7 @@ pub enum VSPrimaries {
     JEDEC_P22, // EBU3213
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, FromPrimitive, num_enum::Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, num_enum::Default)]
 #[repr(u8)]
 pub enum VSChromaLocation {
     Left = 0,

@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use fast_image_resize as fir;
 
-#[derive(Debug, Clone, Copy, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub enum PreviewFilterType {
     Gpu,
     Point,
@@ -13,7 +13,7 @@ pub enum PreviewFilterType {
     Lanczos3,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub enum PreviewTextureFilterType {
     Linear,
     Nearest,

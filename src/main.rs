@@ -38,4 +38,6 @@ fn main() -> Result<()> {
         options,
         Box::new(|cc| Box::new(previewer.with_cc(cc))),
     );
+
+    Ok(())
 }

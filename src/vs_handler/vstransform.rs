@@ -1,13 +1,13 @@
 use std::fmt::Display;
 
-#[derive(Default, Clone, Copy, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct VSTransformOptions {
     pub resizer: VSResizer,
     pub enable_dithering: bool,
     pub dither_algo: VSDitherAlgo,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub enum VSResizer {
     Bilinear,
     Bicubic,
@@ -18,7 +18,7 @@ pub enum VSResizer {
     Spline64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub enum VSDitherAlgo {
     None,
     Ordered,
