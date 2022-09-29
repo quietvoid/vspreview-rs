@@ -13,9 +13,9 @@ use app::VSPreviewer;
 use vs_handler::PreviewedScript;
 
 #[derive(Parser, Debug)]
-#[clap(name = env!("CARGO_PKG_NAME"), about = "VapourSynth script previewer", author = "quietvoid", version = env!("CARGO_PKG_VERSION"))]
+#[command(name = env!("CARGO_PKG_NAME"), about = "VapourSynth script previewer", author = "quietvoid", version = env!("CARGO_PKG_VERSION"))]
 struct Opt {
-    #[clap(name = "input", value_hint = ValueHint::FilePath)]
+    #[arg(id = "input", value_hint = ValueHint::FilePath)]
     input: PathBuf,
 }
 
