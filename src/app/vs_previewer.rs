@@ -738,7 +738,7 @@ impl VSPreviewer {
         // Don't allow quit when inputs are still focused
         if !self.any_input_focused() {
             if ui.input().key_pressed(Key::Q) || ui.input().key_pressed(Key::Escape) {
-                frame.close();
+                frame.quit();
             } else if ui.input().key_pressed(Key::I) {
                 self.state.show_gui = !self.state.show_gui;
 

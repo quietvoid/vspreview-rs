@@ -9,7 +9,7 @@ license = "GPL-3.0"
 [dependencies]
 anyhow = "1.0.66"
 clap = { version = "4.0.18", features = ["derive", "wrap_help", "deprecated"] }
-eframe = { git = "https://github.com/emilk/egui.git", rev = "2ee9ab31515fa8bc517ebe6de150daa61607e43d", features = ["persistence"] }
+eframe = { git = "https://github.com/emilk/egui.git", rev = "eeeb4b7de2d08b7923a0e19cf1a711b7219afa1f", features = ["persistence"] }
 fast_image_resize = "2.0.0"
 image = { version = "0.24.4", default-features = false, features = ["png"] }
 itertools = "0.10.5"
