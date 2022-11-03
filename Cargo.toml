@@ -7,19 +7,19 @@ rust-version = "1.61.0"
 license = "GPL-3.0"
 
 [dependencies]
-anyhow = "1.0.65"
-clap = { version = "4.0.4", features = ["derive", "wrap_help", "deprecated"] }
-eframe = { git = "https://github.com/emilk/egui.git", features = ["persistence"] }
-fast_image_resize = "1.0.0"
+anyhow = "1.0.66"
+clap = { version = "4.0.18", features = ["derive", "wrap_help", "deprecated"] }
+eframe = { git = "https://github.com/emilk/egui.git", rev = "2ee9ab31515fa8bc517ebe6de150daa61607e43d", features = ["persistence"] }
+fast_image_resize = "2.0.0"
 image = { version = "0.24.4", default-features = false, features = ["png"] }
 itertools = "0.10.5"
 lcms2 = "5.5.0"
 num_enum = "0.5.7"
 parking_lot = "0.12.1"
-poll-promise = "0.1.0"
+poll-promise = "0.2.0"
 rfd = "0.10.0"
-serde_derive = "1.0.145"
-serde = "1.0.145"
+serde_derive = "1.0.147"
+serde = "1.0.147"
 vapoursynth = { version = "0.4.0", features = ["vapoursynth-api-36", "vapoursynth-functions", "vsscript-api-32", "vsscript-functions"] }
 
 [[bin]]
