@@ -79,6 +79,8 @@ impl UiFrameProps {
                                     "--master-display \"{}\"",
                                     hdr10_meta.mastering_display.x265_string()
                                 );
+                                println!("{}", arg);
+
                                 ui.output().copied_text = arg;
                             }
                             ui.end_row();
@@ -101,6 +103,8 @@ impl UiFrameProps {
                                     .clicked()
                                 {
                                     let arg = format!("--max-cll \"{},{}\"", maxcll, maxfall);
+                                    println!("{}", arg);
+
                                     ui.output().copied_text = arg;
                                 }
                                 ui.end_row();
