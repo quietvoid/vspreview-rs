@@ -33,11 +33,7 @@ impl VSPreviewer {
         }
 
         // Limit to 2.0 multiplier every zoom, should be plenty
-        if self.state.zoom_multiplier < 1.0 {
-            self.state.zoom_multiplier = 1.0;
-        } else if self.state.zoom_multiplier > 2.0 {
-            self.state.zoom_multiplier = 2.0;
-        }
+        self.state.zoom_multiplier = self.state.zoom_multiplier.clamp(1.0, 2.0);
 
         self.init_transforms();
 

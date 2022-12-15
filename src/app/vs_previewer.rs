@@ -62,7 +62,7 @@ impl VSPreviewer {
         let mut img = orig.clone();
 
         let zoom_factor = state.zoom_factor;
-        let (mut w, mut h) = (src_w as f32, src_h as f32);
+        let (mut w, mut h) = (src_w, src_h);
 
         // Unzoom first and foremost
         if zoom_factor < 1.0 && !state.upscale_to_window {
@@ -836,7 +836,7 @@ impl VSPreviewer {
                 let new_file = rfd::FileDialog::new()
                     .set_title("Select a VapourSynth script file")
                     .add_filter("VapourSynth", &["vpy"])
-                    .set_directory(&path)
+                    .set_directory(path)
                     .pick_file();
 
                 if let Some(new_file) = new_file {
