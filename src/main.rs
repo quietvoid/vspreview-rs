@@ -33,11 +33,15 @@ fn main() -> Result<()> {
         ..Default::default()
     };
 
-    eframe::run_native(
+    let res = eframe::run_native(
         "vspreview-rs",
         options,
         Box::new(|cc| Box::new(previewer.with_cc(cc))),
     );
+
+    if let Err(e) = res {
+        bail!("Failed starting egui window: {}", e);
+    }
 
     Ok(())
 }

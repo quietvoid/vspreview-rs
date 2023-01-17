@@ -52,7 +52,7 @@ impl eframe::App for VSPreviewer {
         let panel_frame = Frame::default()
             .fill(Color32::from_gray(51))
             .inner_margin(Margin::same(self.state.canvas_margin))
-            .stroke(Stroke::none());
+            .stroke(Stroke::NONE);
 
         egui::CentralPanel::default()
             .frame(panel_frame)
