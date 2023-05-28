@@ -735,22 +735,19 @@ impl VSPreviewer {
     ) {
         // Don't allow quit when inputs are still focused
         if !self.any_input_focused() {
-            if ui.input().key_pressed(Key::Q) || ui.input().key_pressed(Key::Escape) {
+            if ui.input(|i| i.key_pressed(Key::Q) || i.key_pressed(Key::Escape)) {
                 frame.close();
-            } else if ui.input().key_pressed(Key::I) {
+            } else if ui.input(|i| i.key_pressed(Key::I)) {
                 self.state.show_gui = !self.state.show_gui;
 
                 // Clear if the GUI is hidden
                 if !self.state.show_gui {
                     self.inputs_focused.clear();
                 }
-            } else if ui.input().key_pressed(Key::R) {
+            } else if ui.input(|i| i.key_pressed(Key::R)) {
                 self.reload(ctx.clone())
-            } else if ui.input().modifiers.ctrl
-                && ui.input().modifiers.shift
-                && ui.input().key_pressed(Key::C)
-            {
-                ui.output().copied_text = self.state.cur_frame_no.to_string();
+            } else if ui.input(|i| i.modifiers.ctrl && i.modifiers.shift && i.key_pressed(Key::C)) {
+                ui.output_mut(|o| o.copied_text = self.state.cur_frame_no.to_string());
             }
         }
     }

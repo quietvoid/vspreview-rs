@@ -29,8 +29,8 @@ impl UiPreviewImage {
             false
         };
 
-        let zoom_delta = ui.input().zoom_delta();
-        let scroll_delta = ui.input().scroll_delta;
+        let zoom_delta = ui.input(|i| i.zoom_delta());
+        let scroll_delta = ui.input(|i| i.scroll_delta);
 
         // Acquire frame texture to render now
         let preview_frame = if has_current_output {
@@ -131,7 +131,7 @@ impl UiPreviewImage {
         rerender |= Self::check_update_output(pv, ui)?;
         rerender |= Self::check_icc_toggle(pv, ui)?;
 
-        if ui.input().key_pressed(Key::S) {
+        if ui.input(|i| i.key_pressed(Key::S)) {
             pv.save_screenshot()?;
         }
 
@@ -143,7 +143,7 @@ impl UiPreviewImage {
     /// Returns whether to rerender
     pub fn check_update_seek(pv: &mut VSPreviewer, ui: &mut egui::Ui) -> Result<bool> {
         // Must not have modifiers
-        if !ui.input().modifiers.is_none() {
+        if !ui.input(|i| i.modifiers.is_none()) {
             return Ok(false);
         }
 
@@ -155,21 +155,21 @@ impl UiPreviewImage {
 
         let current = pv.state.cur_frame_no;
 
-        let res = if ui.input().key_pressed(Key::ArrowLeft) || ui.input().key_pressed(Key::H) {
+        let res = if ui.input(|i| i.key_pressed(Key::ArrowLeft) || i.key_pressed(Key::H)) {
             if current > 0 {
                 pv.state.cur_frame_no -= 1;
                 true
             } else {
                 false
             }
-        } else if ui.input().key_pressed(Key::ArrowRight) || ui.input().key_pressed(Key::L) {
+        } else if ui.input(|i| i.key_pressed(Key::ArrowRight) || i.key_pressed(Key::L)) {
             if current < node_info.num_frames - 1 {
                 pv.state.cur_frame_no += 1;
                 true
             } else {
                 false
             }
-        } else if ui.input().key_pressed(Key::ArrowUp) | ui.input().key_pressed(Key::K) {
+        } else if ui.input(|i| i.key_pressed(Key::ArrowUp) || i.key_pressed(Key::K)) {
             if current >= node_info.framerate {
                 pv.state.cur_frame_no -= node_info.framerate;
                 true
@@ -179,7 +179,7 @@ impl UiPreviewImage {
             } else {
                 false
             }
-        } else if ui.input().key_pressed(Key::ArrowDown) | ui.input().key_pressed(Key::J) {
+        } else if ui.input(|i| i.key_pressed(Key::ArrowDown) || i.key_pressed(Key::J)) {
             pv.state.cur_frame_no += node_info.framerate;
 
             pv.state.cur_frame_no < node_info.num_frames - 1
@@ -197,31 +197,31 @@ impl UiPreviewImage {
 
     pub fn check_update_output(pv: &mut VSPreviewer, ui: &mut egui::Ui) -> Result<bool> {
         // Must not have modifiers
-        if !ui.input().modifiers.is_none() {
+        if !ui.input(|i| i.modifiers.is_none()) {
             return Ok(false);
         }
 
         let old_output = pv.state.cur_output;
 
-        let new_output: i32 = if ui.input().key_pressed(Key::Num1) {
+        let new_output: i32 = if ui.input(|i| i.key_pressed(Key::Num1)) {
             0
-        } else if ui.input().key_pressed(Key::Num2) {
+        } else if ui.input(|i| i.key_pressed(Key::Num2)) {
             1
-        } else if ui.input().key_pressed(Key::Num3) {
+        } else if ui.input(|i| i.key_pressed(Key::Num3)) {
             2
-        } else if ui.input().key_pressed(Key::Num4) {
+        } else if ui.input(|i| i.key_pressed(Key::Num4)) {
             3
-        } else if ui.input().key_pressed(Key::Num5) {
+        } else if ui.input(|i| i.key_pressed(Key::Num5)) {
             4
-        } else if ui.input().key_pressed(Key::Num6) {
+        } else if ui.input(|i| i.key_pressed(Key::Num6)) {
             5
-        } else if ui.input().key_pressed(Key::Num7) {
+        } else if ui.input(|i| i.key_pressed(Key::Num7)) {
             6
-        } else if ui.input().key_pressed(Key::Num8) {
+        } else if ui.input(|i| i.key_pressed(Key::Num8)) {
             7
-        } else if ui.input().key_pressed(Key::Num9) {
+        } else if ui.input(|i| i.key_pressed(Key::Num9)) {
             8
-        } else if ui.input().key_pressed(Key::Num0) {
+        } else if ui.input(|i| i.key_pressed(Key::Num0)) {
             9
         } else {
             -1
@@ -248,11 +248,12 @@ impl UiPreviewImage {
         // Update zoom delta to take into consideration small step keyboard input
         let mut delta = zoom_delta;
         let small_step = delta == 1.0
-            && ui.input().modifiers.ctrl
-            && (ui.input().key_pressed(Key::ArrowDown) || ui.input().key_pressed(Key::ArrowUp));
+            && ui.input(|i| {
+                i.modifiers.ctrl && (i.key_pressed(Key::ArrowDown) || i.key_pressed(Key::ArrowUp))
+            });
 
         if small_step {
-            if ui.input().key_pressed(Key::ArrowDown) {
+            if ui.input(|i| i.key_pressed(Key::ArrowDown)) {
                 delta = 0.0;
             } else {
                 delta = 2.0;
@@ -262,13 +263,13 @@ impl UiPreviewImage {
         let mut scroll_delta = scroll_delta;
 
         // Keyboard based scrolling
-        if ui.input().key_pressed(Key::End) {
+        if ui.input(|i| i.key_pressed(Key::End)) {
             scroll_delta.x = -50.0;
-        } else if ui.input().key_pressed(Key::Home) {
+        } else if ui.input(|i| i.key_pressed(Key::Home)) {
             scroll_delta.x = 50.0;
-        } else if ui.input().key_pressed(Key::PageDown) {
+        } else if ui.input(|i| i.key_pressed(Key::PageDown)) {
             scroll_delta.y = -50.0;
-        } else if ui.input().key_pressed(Key::PageUp) {
+        } else if ui.input(|i| i.key_pressed(Key::PageUp)) {
             scroll_delta.y = 50.0;
         }
 
@@ -354,14 +355,14 @@ impl UiPreviewImage {
 
     pub fn check_icc_toggle(pv: &mut VSPreviewer, ui: &mut egui::Ui) -> Result<bool> {
         // Must not have modifiers
-        if !ui.input().modifiers.is_none() {
+        if !ui.input(|i| i.modifiers.is_none()) {
             return Ok(false);
         }
 
         let mut res = false;
 
         // Toggle is always a rerender
-        if ui.input().key_pressed(Key::C) {
+        if ui.input(|i| i.key_pressed(Key::C)) {
             pv.state.icc_enabled = !pv.state.icc_enabled;
 
             pv.reprocess_outputs(true, false);

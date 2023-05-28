@@ -81,7 +81,7 @@ impl UiFrameProps {
                                 );
                                 println!("{}", arg);
 
-                                ui.output().copied_text = arg;
+                                ui.output_mut(|o| o.copied_text = arg);
                             }
                             ui.end_row();
 
@@ -105,7 +105,7 @@ impl UiFrameProps {
                                     let arg = format!("--max-cll \"{},{}\"", maxcll, maxfall);
                                     println!("{}", arg);
 
-                                    ui.output().copied_text = arg;
+                                    ui.output_mut(|o| o.copied_text = arg);
                                 }
                                 ui.end_row();
                             }
