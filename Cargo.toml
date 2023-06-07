@@ -16,7 +16,8 @@ itertools = "0.10.5"
 lcms2 = "5.6.0"
 num_enum = "0.6.1"
 parking_lot = "0.12.1"
-poll-promise = "0.2.0"
+// FIXME: https://github.com/EmbarkStudios/poll-promise/issues/18
+poll-promise = { git = "https://github.com/EmbarkStudios/poll-promise.git" }
 rfd = "0.10.0"
 serde_derive = "1.0.163"
 serde = "1.0.163"
