@@ -3,24 +3,24 @@ name = "vspreview-rs"
 version = "0.1.2"
 authors = ["quietvoid"]
 edition = "2021"
-rust-version = "1.61.0"
+rust-version = "1.70.0"
 license = "GPL-3.0"
 
 [dependencies]
-anyhow = "1.0.72"
-clap = { version = "4.3.19", features = ["derive", "wrap_help", "deprecated"] }
-eframe = { version = "0.22.0", features = ["persistence"] }
+anyhow = "1.0.75"
+clap = { version = "4.4.6", features = ["derive", "wrap_help", "deprecated"] }
+eframe = { version = "0.23.0", features = ["persistence"] }
 fast_image_resize = "2.7.3"
-image = { version = "0.24.6", default-features = false, features = ["png"] }
+image = { version = "0.24.7", default-features = false, features = ["png"] }
+rgb = "0.8.36"
 itertools = "0.11.0"
-lcms2 = "5.6.0"
-num_enum = "0.6.1"
+lcms2 = "6.0.0"
+num_enum = "0.7.0"
 parking_lot = "0.12.1"
-# FIXME: https://github.com/EmbarkStudios/poll-promise/issues/18
-poll-promise = { git = "https://github.com/EmbarkStudios/poll-promise.git" }
-rfd = "0.11.4"
-serde_derive = "1.0.175"
-serde = "1.0.175"
+poll-promise = "0.3.0"
+rfd = "0.12.0"
+serde_derive = "1.0.188"
+serde = "1.0.188"
 vapoursynth = { version = "0.4.0", features = ["vapoursynth-api-36", "vapoursynth-functions", "vsscript-api-32", "vsscript-functions"] }
 
 [[bin]]

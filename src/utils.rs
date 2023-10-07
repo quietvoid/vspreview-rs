@@ -4,6 +4,7 @@ use anyhow::{anyhow, Result};
 use eframe::epaint::{Color32, ColorImage, Vec2};
 use fast_image_resize as fr;
 use image::{DynamicImage, ImageBuffer};
+use rgb::{AsPixels, ComponentSlice};
 use vapoursynth::prelude::{ColorFamily, FrameRef};
 
 use crate::app::{PreviewState, PreviewTransforms};
@@ -138,13 +139,16 @@ pub fn image_to_colorimage(
         DynamicImage::ImageRgb8(rgb) => {
             if let Some(icc) = icc {
                 let t = icc.transform.as_ref().unwrap();
-                let mut transformed: Vec<image::Rgb<u8>> = rgb.pixels().cloned().collect();
+                let mut transformed = rgb.as_pixels().to_vec();
 
                 t.transform_in_place(&mut transformed);
 
                 transformed
                     .iter()
-                    .map(|p| Color32::from_rgb(p[0], p[1], p[2]))
+                    .map(|p| {
+                        let p = p.as_slice();
+                        Color32::from_rgb(p[0], p[1], p[2])
+                    })
                     .collect()
             } else {
                 rgb.as_raw()

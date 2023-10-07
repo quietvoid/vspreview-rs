@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use lcms2::{CIExyY, CIExyYTRIPLE, Flags, Intent, PixelFormat, Profile, ToneCurve, Transform};
+use rgb::RGB8;
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct IccProfile {
@@ -16,7 +17,7 @@ pub struct IccProfile {
     pub input_primaries: XyYTriple,
 
     #[serde(skip)]
-    pub transform: Option<Transform<image::Rgb<u8>, image::Rgb<u8>>>,
+    pub transform: Option<Transform<RGB8, RGB8>>,
 }
 
 #[derive(Debug, Copy, Clone, serde::Deserialize, serde::Serialize)]
