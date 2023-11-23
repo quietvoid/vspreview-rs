@@ -7,20 +7,23 @@ use eframe::egui::{self, TextureOptions};
 use fast_image_resize as fir;
 use image::DynamicImage;
 use parking_lot::{Mutex, RwLock};
+use tokio::sync::mpsc::Sender;
 
 use crate::utils::image_to_colorimage;
+use crate::vs_handler::PreviewedScript;
 
 use super::*;
 
-#[derive(Default)]
 pub struct VSPreviewer {
     pub script: Arc<Mutex<PreviewedScript>>,
+    cmd_sender: Sender<VSCommandMsg>,
+
     pub state: PreviewState,
     pub errors: HashMap<&'static str, Vec<String>>,
     pub about_window_open: bool,
 
     /// Promise returning the newly reloaded outputs
-    pub reload_data: Option<ReloadPromise>,
+    pub reload_data: Option<Promise<PreviewerResponse>>,
     /// Outputs available from the script
     pub outputs: HashMap<i32, PreviewOutput>,
     /// Last output used
@@ -37,17 +40,40 @@ pub struct VSPreviewer {
     pub reprocess: bool,
 
     /// Promise returning a new requested frame
-    pub frame_promise: Arc<Mutex<Option<FramePromise>>>,
+    pub frame_promise: Arc<Mutex<Option<Promise<PreviewerResponse>>>>,
     /// Promise returning the original props of the current frame
-    pub original_props_promise: Arc<Mutex<Option<PropsPromise>>>,
+    pub original_props_promise: Arc<Mutex<Option<Promise<PreviewerResponse>>>>,
 
     /// Promise returning a bool, whether to rerender or not
-    pub misc_promise: Arc<Mutex<Option<Promise<ReloadType>>>>,
+    pub misc_promise: Arc<Mutex<Option<Promise<PreviewerResponse>>>>,
 
     pub transforms: Arc<Mutex<PreviewTransforms>>,
+    pub exit_promise: Option<Promise<PreviewerResponse>>,
 }
 
 impl VSPreviewer {
+    pub fn new(script: Arc<Mutex<PreviewedScript>>, cmd_sender: Sender<VSCommandMsg>) -> Self {
+        Self {
+            script,
+            cmd_sender,
+            state: Default::default(),
+            errors: Default::default(),
+            about_window_open: Default::default(),
+            reload_data: Default::default(),
+            outputs: Default::default(),
+            last_output_key: Default::default(),
+            available_size: Default::default(),
+            inputs_focused: Default::default(),
+            rerender: Default::default(),
+            reprocess: Default::default(),
+            frame_promise: Default::default(),
+            original_props_promise: Default::default(),
+            misc_promise: Default::default(),
+            transforms: Default::default(),
+            exit_promise: Default::default(),
+        }
+    }
+
     pub fn process_image(
         orig: &DynamicImage,
         state: &PreviewState,
@@ -166,41 +192,20 @@ impl VSPreviewer {
             self.errors.clear();
         }
 
-        let script = self.script.clone();
-
-        self.reload_data = Some(poll_promise::Promise::spawn_thread(
-            "initialization/reload",
-            move || {
-                let mut script_mutex = script.lock();
-                let res = script_mutex.reload();
-                script_mutex.add_vs_error(&res);
-
-                if res.is_ok() {
-                    let outputs_res = script_mutex.get_outputs();
-                    script_mutex.add_vs_error(&outputs_res);
-
-                    let outputs = if let Ok(outputs) = outputs_res {
-                        // No output case handled by vapoursynth-rs
-                        assert!(!outputs.is_empty());
-                        Some(outputs)
-                    } else {
-                        None
-                    };
-
-                    // Not ready but we need to get the checker going
-                    ctx.request_repaint();
-
-                    outputs
-                } else {
-                    None
-                }
-            },
-        ));
+        let (res_sender, promise) = Promise::new();
+        self.reload_data = Some(promise);
+        self.cmd_sender
+            .try_send(VSCommandMsg {
+                res_sender,
+                cmd: VSCommand::Reload,
+                egui_ctx: ctx.clone(),
+            })
+            .ok();
     }
 
     pub fn check_reload_finish(&mut self) -> Result<()> {
         if let Some(promise) = &self.reload_data {
-            if let Some(promise_res) = promise.ready() {
+            if let Some(PreviewerResponse::Reload(promise_res)) = promise.ready() {
                 self.outputs.clear();
 
                 if let Some(outputs) = promise_res {
@@ -309,36 +314,29 @@ impl VSPreviewer {
                 // Reset current changed flag
                 self.state.translate_changed = false;
 
-                let script = self.script.clone();
                 let win_size = self.available_size;
 
                 let pf = self.get_current_frame()?;
 
-                let ctx = ctx.clone();
                 let frame_mutex = self.frame_promise.clone();
 
                 let fetch_image_state = FetchImageState {
-                    ctx,
                     frame_mutex,
-                    script,
                     state,
                     pf,
                     reprocess,
                     win_size,
                 };
 
-                *promise = Some(poll_promise::Promise::spawn_thread(
-                    "fetch_frame",
-                    move || {
-                        match Self::get_preview_image(fetch_image_state) {
-                            Ok(preview_frame) => preview_frame,
-                            Err(e) => {
-                                // Errors here are not recoverable
-                                panic!("{}", e)
-                            }
-                        }
-                    },
-                ));
+                let (res_sender, new_promise) = Promise::new();
+                *promise = Some(new_promise);
+                self.cmd_sender
+                    .try_send(VSCommandMsg {
+                        res_sender,
+                        cmd: VSCommand::Frame(fetch_image_state),
+                        egui_ctx: ctx.clone(),
+                    })
+                    .ok();
             }
         }
 
@@ -350,7 +348,7 @@ impl VSPreviewer {
             let mut updated_tex = false;
 
             if let Some(promise) = &*promise_mutex {
-                if let Some(Some(rendered_frame)) = promise.ready() {
+                if let Some(PreviewerResponse::Frame(Some(rendered_frame))) = promise.ready() {
                     // Block as it's supposed to be ready
                     let pf = rendered_frame.read();
 
@@ -417,11 +415,13 @@ impl VSPreviewer {
         }
     }
 
-    pub fn get_preview_image(fetch_image_state: FetchImageState) -> Result<Option<VSPreviewFrame>> {
+    pub fn get_preview_image(
+        ctx: Context,
+        script: Arc<Mutex<PreviewedScript>>,
+        fetch_image_state: FetchImageState,
+    ) -> Result<Option<VSPreviewFrame>> {
         let FetchImageState {
-            ctx,
             frame_mutex,
-            script,
             state,
             pf,
             reprocess,
@@ -674,69 +674,58 @@ impl VSPreviewer {
 
     // Can only be called when an output is selected
     pub fn fetch_original_props(&mut self, ctx: &egui::Context) {
-        let cur_output = self.state.cur_output;
-        let cur_frame_no = self.state.cur_frame_no;
-
-        let ctx = ctx.clone();
-        let script = self.script.clone();
-
         if let Some(mut promise_mutex) = self.original_props_promise.try_lock() {
-            // Block frame requests
-            let frame_mutex = self.frame_promise.clone();
+            let fetch_props_state = FetchPropsState {
+                frame_mutex: self.frame_promise.clone(),
+                state: self.state,
+            };
 
-            let promise = poll_promise::Promise::spawn_thread("fetch_original_props", move || {
-                if let Some(mut script_mutex) = script.try_lock() {
-                    let _lock = frame_mutex.lock();
-
-                    let props_res = script_mutex.get_original_props(cur_output, cur_frame_no);
-                    script_mutex.add_vs_error(&props_res);
-
-                    if let Ok(props) = props_res {
-                        ctx.request_repaint();
-
-                        Some(props)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            });
-
-            *promise_mutex = Some(promise);
+            let (res_sender, new_promise) = Promise::new();
+            *promise_mutex = Some(new_promise);
+            self.cmd_sender
+                .try_send(VSCommandMsg {
+                    res_sender,
+                    cmd: VSCommand::FrameProps(fetch_props_state),
+                    egui_ctx: ctx.clone(),
+                })
+                .ok();
         }
     }
 
     pub fn check_original_props_finish(&mut self) -> Result<()> {
         if let Some(mut mutex) = self.original_props_promise.try_lock() {
-            if let Some(promise) = &*mutex {
-                if let Some(props) = promise.ready() {
-                    let output = self
-                        .outputs
-                        .get_mut(&self.state.cur_output)
-                        .ok_or_else(|| {
-                            anyhow!("check_original_props_finish: Invalid current output key")
-                        })?;
-                    output.original_props = *props;
+            if let Some(PreviewerResponse::Props(props)) = mutex.as_ref().and_then(|p| p.ready()) {
+                let output = self
+                    .outputs
+                    .get_mut(&self.state.cur_output)
+                    .ok_or_else(|| {
+                        anyhow!("check_original_props_finish: Invalid current output key")
+                    })?;
+                output.original_props = *props;
 
-                    *mutex = None;
-                }
+                *mutex = None;
             };
         }
 
         Ok(())
     }
 
-    pub fn check_misc_keyboard_inputs(
-        &mut self,
-        ctx: &egui::Context,
-        frame: &mut eframe::Frame,
-        ui: &mut egui::Ui,
-    ) {
+    pub fn check_misc_keyboard_inputs(&mut self, ctx: &egui::Context, ui: &mut egui::Ui) {
         // Don't allow quit when inputs are still focused
         if !self.any_input_focused() {
             if ui.input(|i| i.key_pressed(Key::Q) || i.key_pressed(Key::Escape)) {
-                frame.close();
+                if self.exit_promise.is_none() {
+                    let (res_sender, new_promise) = Promise::new();
+
+                    self.exit_promise = Some(new_promise);
+                    self.cmd_sender
+                        .try_send(VSCommandMsg {
+                            res_sender,
+                            cmd: VSCommand::Exit,
+                            egui_ctx: ctx.clone(),
+                        })
+                        .ok();
+                }
             } else if ui.input(|i| i.key_pressed(Key::I)) {
                 self.state.show_gui = !self.state.show_gui;
 
@@ -823,32 +812,16 @@ impl VSPreviewer {
     }
 
     pub fn change_script_file(&mut self, ctx: &egui::Context) {
-        let script = self.script.clone();
-        let ctx = ctx.clone();
-
         if let Some(mut promise_mutex) = self.misc_promise.try_lock() {
-            let promise = Promise::spawn_thread("change_script", move || {
-                let path = std::env::current_dir().unwrap();
-
-                let new_file = rfd::FileDialog::new()
-                    .set_title("Select a VapourSynth script file")
-                    .add_filter("VapourSynth", &["vpy"])
-                    .set_directory(path)
-                    .pick_file();
-
-                if let Some(new_file) = new_file {
-                    let mut script_mutex = script.lock();
-
-                    script_mutex.change_script_path(new_file);
-                    ctx.request_repaint();
-
-                    ReloadType::Reload
-                } else {
-                    ReloadType::None
-                }
-            });
-
-            *promise_mutex = Some(promise);
+            let (res_sender, new_promise) = Promise::new();
+            *promise_mutex = Some(new_promise);
+            self.cmd_sender
+                .try_send(VSCommandMsg {
+                    res_sender,
+                    cmd: VSCommand::ChangeScript,
+                    egui_ctx: ctx.clone(),
+                })
+                .ok();
         }
     }
 
@@ -856,10 +829,8 @@ impl VSPreviewer {
         let mut reload_type = None;
 
         if let Some(mutex) = self.misc_promise.try_lock() {
-            if let Some(promise) = &*mutex {
-                if let Some(rt) = promise.ready() {
-                    reload_type = Some(*rt);
-                }
+            if let Some(PreviewerResponse::Misc(rt)) = mutex.as_ref().and_then(|p| p.ready()) {
+                reload_type = Some(*rt);
             };
         }
 
@@ -885,33 +856,16 @@ impl VSPreviewer {
     }
 
     pub fn change_icc_profile(&mut self, ctx: &egui::Context) {
-        let ctx = ctx.clone();
-        let transforms = self.transforms.clone();
-
         if let Some(mut promise_mutex) = self.misc_promise.try_lock() {
-            let promise = Promise::spawn_thread("change_icc", move || {
-                let new_file = rfd::FileDialog::new()
-                    .set_title("Select a ICC profile file")
-                    .add_filter("ICC", &["icc", "icm"])
-                    .pick_file();
-
-                if let Some(new_file) = new_file {
-                    let mut transforms = transforms.lock();
-
-                    let mut profile = IccProfile::srgb(new_file);
-                    profile.setup();
-
-                    transforms.icc = Some(profile);
-
-                    ctx.request_repaint();
-
-                    ReloadType::Reprocess
-                } else {
-                    ReloadType::None
-                }
-            });
-
-            *promise_mutex = Some(promise);
+            let (res_sender, new_promise) = Promise::new();
+            *promise_mutex = Some(new_promise);
+            self.cmd_sender
+                .try_send(VSCommandMsg {
+                    res_sender,
+                    cmd: VSCommand::ChangeIcc(self.transforms.clone()),
+                    egui_ctx: ctx.clone(),
+                })
+                .ok();
         }
     }
 }

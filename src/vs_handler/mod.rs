@@ -18,7 +18,7 @@ pub use vsframe::{VSFrame, VSFrameProps};
 pub use vsnode::VSNode;
 pub use vstransform::*;
 
-#[derive(Default, serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 pub struct PreviewedScript {
     script_file: String,
     script_dir: PathBuf,
@@ -237,6 +237,12 @@ impl PreviewedScript {
         api.log(MessageType::Debug, &message)?;
 
         Ok(())
+    }
+
+    pub fn exit(&self) {
+        if let Some(env) = self.env.as_ref() {
+            env.clear();
+        }
     }
 }
 
