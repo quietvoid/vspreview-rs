@@ -45,7 +45,12 @@ impl VSPreviewer {
 }
 
 impl eframe::App for VSPreviewer {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if let Some(PreviewerResponse::Close) = self.exit_promise.as_ref().and_then(|p| p.ready()) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            return;
+        }
+
         let promise_res = self.check_promise_callbacks(ctx);
         self.add_error("callbacks", &promise_res);
 
@@ -58,7 +63,7 @@ impl eframe::App for VSPreviewer {
             .frame(panel_frame)
             .show(ctx, |ui| {
                 // Check for quit, GUI toggle, reload, etc.
-                self.check_misc_keyboard_inputs(ctx, frame, ui);
+                self.check_misc_keyboard_inputs(ctx, ui);
 
                 // React on canvas resolution change
                 if self.available_size != ui.available_size() {

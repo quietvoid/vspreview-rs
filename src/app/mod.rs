@@ -1,9 +1,12 @@
 use std::{collections::HashMap, sync::Arc};
 
-use eframe::{egui, epaint::Vec2};
+use eframe::{
+    egui::{self, Context},
+    epaint::Vec2,
+};
 use image::DynamicImage;
 use parking_lot::{Mutex, RwLock};
-use poll_promise::Promise;
+use poll_promise::{Promise, Sender};
 
 mod eframe_app;
 mod preview_filter_type;
@@ -16,22 +19,30 @@ use ui::*;
 use preview_filter_type::{PreviewFilterType, PreviewTextureFilterType};
 pub use vs_previewer::VSPreviewer;
 
-use super::vs_handler::{vstransform, PreviewedScript, VSFrame, VSFrameProps, VSOutput};
+use super::vs_handler::{vstransform, VSFrame, VSFrameProps, VSOutput};
 use vstransform::VSTransformOptions;
 
 use crate::utils::{
     dimensions_for_window, resize_fast, translate_norm_coeffs, update_input_key_state,
 };
 
-use transforms::icc::IccProfile;
+pub use transforms::icc::IccProfile;
 
 pub const MIN_ZOOM: f32 = 0.125;
 pub const MAX_ZOOM: f32 = 64.0;
 
 type VSPreviewFrame = Arc<RwLock<PreviewFrame>>;
-type FramePromise = Promise<Option<VSPreviewFrame>>;
-type PropsPromise = Promise<Option<VSFrameProps>>;
-type ReloadPromise = Promise<Option<HashMap<i32, VSOutput>>>;
+type FrameResponse = Option<VSPreviewFrame>;
+type PropsResponse = Option<VSFrameProps>;
+type ReloadResponse = Option<HashMap<i32, VSOutput>>;
+
+pub enum PreviewerResponse {
+    Reload(ReloadResponse),
+    Frame(FrameResponse),
+    Props(PropsResponse),
+    Misc(ReloadType),
+    Close,
+}
 
 /// TODO:
 ///   - Canvas background color
@@ -92,13 +103,16 @@ pub struct PreviewFrame {
 }
 
 pub struct FetchImageState {
-    ctx: egui::Context,
-    frame_mutex: Arc<Mutex<Option<FramePromise>>>,
-    script: Arc<Mutex<PreviewedScript>>,
+    frame_mutex: Arc<Mutex<Option<Promise<PreviewerResponse>>>>,
     state: PreviewState,
     pf: Option<VSPreviewFrame>,
     reprocess: bool,
     win_size: Vec2,
+}
+
+pub struct FetchPropsState {
+    pub frame_mutex: Arc<Mutex<Option<Promise<PreviewerResponse>>>>,
+    pub state: PreviewState,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -112,6 +126,21 @@ pub enum ReloadType {
 #[serde(default)]
 pub struct PreviewTransforms {
     pub icc: Option<IccProfile>,
+}
+
+pub enum VSCommand {
+    Frame(FetchImageState),
+    FrameProps(FetchPropsState),
+    ChangeScript,
+    ChangeIcc(Arc<Mutex<PreviewTransforms>>),
+    Reload,
+    Exit,
+}
+
+pub struct VSCommandMsg {
+    pub res_sender: Sender<PreviewerResponse>,
+    pub cmd: VSCommand,
+    pub egui_ctx: Context,
 }
 
 impl Default for PreviewState {
