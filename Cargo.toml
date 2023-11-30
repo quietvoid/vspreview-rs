@@ -8,13 +8,13 @@ license = "GPL-3.0"
 
 [dependencies]
 anyhow = "1.0.75"
-clap = { version = "4.4.8", features = ["derive", "wrap_help", "deprecated"] }
-eframe = { version = "0.24.0", features = ["persistence"] }
+clap = { version = "4.4.10", features = ["derive", "wrap_help", "deprecated"] }
+eframe = { version = "0.24.1", features = ["persistence"] }
 fast_image_resize = "2.7.3"
 image = { version = "0.24.7", default-features = false, features = ["png"] }
 rgb = "0.8.37"
 itertools = "0.12.0"
-lcms2 = "6.0.0"
+lcms2 = "6.0.2"
 num_enum = "0.7.1"
 tokio = { version = "1.34.0", default-features = false, features = ["rt-multi-thread", "macros", "sync"] }
 tokio-stream = { version = "*", default-features = false, features = ["net"] }
