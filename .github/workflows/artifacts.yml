@@ -21,35 +21,23 @@ jobs:
         include:
           - build: Windows
             os: windows-latest
-            rust: stable
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Install Rust
-        if: matrix.rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ matrix.rust }}
-          default: true
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Get the version
         shell: bash
         run: |
           echo "RELEASE_PKG_VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)" >> $GITHUB_ENV
 
-      - name: Install VapourSynth (Windows)
-        run: build/win64-vs-setup.ps1
-
       - name: Build (Windows)
-        if: matrix.build == 'Windows'
-        run: |
-          $Env:Path += ";C:\Program Files\VapourSynth;"
-          cargo build --release
+        run: cargo build --release
 
       - name: Create artifact directory
-        run: |
-          mkdir ${{ env.RELEASE_DIR }}
+        run: mkdir ${{ env.RELEASE_DIR }}
 
       - name: Create zipfile (Windows)
         if: matrix.build == 'Windows'
@@ -59,7 +47,7 @@ jobs:
           7z a ./${{ env.RELEASE_DIR }}/${{ env.RELEASE_BIN }}-${{ env.RELEASE_PKG_VERSION }}-${{ env.WINDOWS_TARGET }}.zip ./${{ env.RELEASE_BIN }}.exe
 
       - name: Upload Zip
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.build }}
           path: ./${{ env.RELEASE_DIR }}
