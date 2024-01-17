@@ -33,8 +33,14 @@ jobs:
         run: |
           echo "RELEASE_PKG_VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)" >> $GITHUB_ENV
 
+      - name: Install VapourSynth (Windows)
+        run: build/win64-vs-setup.ps1
+
       - name: Build (Windows)
-        run: cargo build --release
+        if: matrix.build == 'Windows'
+        run: |
+          $Env:Path += ";C:\Program Files\VapourSynth;"
+          cargo build --release
 
       - name: Create artifact directory
         run: mkdir ${{ env.RELEASE_DIR }}
