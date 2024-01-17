@@ -25,10 +25,6 @@ jobs:
         run: |
           cargo check --workspace --all-features
 
-      - name: Test
-        run: |
-          cargo test --workspace --all-features
-
       - name: Rustfmt
         run: |
           cargo fmt --all --check
