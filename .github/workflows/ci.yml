@@ -16,7 +16,6 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get install -y libgtk-3-dev
 
-
       - name: Install Rust, clippy and rustfmt
         uses: dtolnay/rust-toolchain@stable
         with:
