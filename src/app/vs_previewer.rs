@@ -379,6 +379,7 @@ impl VSPreviewer {
                         let tex_opts = TextureOptions {
                             magnification: tex_filter,
                             minification: tex_filter,
+                            ..Default::default()
                         };
                         // Update texture on render done
                         if let Some(ref mut tex) = *tex_mutex {
