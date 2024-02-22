@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -22,6 +23,7 @@ pub use vstransform::*;
 pub struct PreviewedScript {
     script_file: String,
     script_dir: PathBuf,
+    variables: Vec<String>,
 
     #[serde(skip)]
     env: Option<Environment>,
@@ -45,7 +47,7 @@ pub struct VSMessage {
 }
 
 impl PreviewedScript {
-    pub fn new(script_path: PathBuf) -> Self {
+    pub fn new(script_path: PathBuf, variables: Vec<String>) -> Self {
         let mut script_dir = script_path.clone();
         script_dir.pop();
 
@@ -57,6 +59,7 @@ impl PreviewedScript {
         Self {
             script_file,
             script_dir,
+            variables,
             env: None,
             message_handler_id: None,
             vs_messages: Arc::new(Mutex::new(Vec::new())),
@@ -87,6 +90,22 @@ impl PreviewedScript {
             });
 
             self.message_handler_id = Some(id);
+        }
+
+        if !self.variables.is_empty() {
+            let mut variables = OwnedMap::new(API::get().unwrap());
+            let kv_map = self
+                .variables
+                .iter()
+                .filter_map(|s| s.split('=').collect_tuple());
+            for (name, value) in kv_map {
+                variables
+                    .append_data(name, value.as_bytes())
+                    .expect("Couldn't append an argument value");
+            }
+
+            env.set_variables(&variables)
+                .expect("Couldn't set arguments");
         }
 
         env.eval_file(&self.script_file, EvalFlags::SetWorkingDir)?;

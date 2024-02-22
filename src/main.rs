@@ -18,6 +18,14 @@ use vs_handler::PreviewedScript;
 struct Opt {
     #[arg(id = "input", value_hint = ValueHint::FilePath)]
     input: PathBuf,
+
+    #[arg(
+        id = "variable",
+        short = 'v',
+        help = "Variables to set in the script environment. Example: `-v key=value`",
+        value_delimiter = ','
+    )]
+    variables: Vec<String>,
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 1)]
@@ -28,7 +36,7 @@ async fn main() -> Result<()> {
         bail!("Input script file does not exist!");
     }
 
-    let script = Arc::new(Mutex::new(PreviewedScript::new(opt.input)));
+    let script = Arc::new(Mutex::new(PreviewedScript::new(opt.input, opt.variables)));
     let (cmd_sender, cmd_receiver) = tokio::sync::mpsc::channel(1);
 
     {
