@@ -21,7 +21,9 @@ struct Opt {
 
     #[arg(
         id = "variable",
+        visible_alias = "arg",
         short = 'v',
+        visible_short_alias = 'a',
         help = "Variables to set in the script environment. Example: `-v key=value`",
         value_delimiter = ','
     )]
