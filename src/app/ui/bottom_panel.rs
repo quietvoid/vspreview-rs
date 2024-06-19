@@ -13,7 +13,7 @@ impl UiBottomPanel {
 
         let transparent_frame = egui::Frame::default()
             .fill(Color32::from_black_alpha(96))
-            .inner_margin(egui::style::Margin {
+            .inner_margin(egui::Margin {
                 left: 20.0,
                 right: 20.0,
                 top: 10.0,

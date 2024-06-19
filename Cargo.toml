@@ -7,22 +7,22 @@ rust-version = "1.72.0"
 license = "GPL-3.0"
 
 [dependencies]
-anyhow = "1.0.80"
+anyhow = "1.0.86"
 clap = { version = "4.4.18", features = ["derive", "wrap_help", "deprecated"] }
-eframe = { version = "0.26.2", features = ["persistence"] }
-fast_image_resize = "3.0.4"
-image = { version = "0.24.9", default-features = false, features = ["png"] }
+eframe = { version = "0.27.2", features = ["persistence"] }
+fast_image_resize = "4.0.0"
+image = { version = "0.25.1", default-features = false, features = ["png"] }
 rgb = "0.8.37"
-itertools = "0.12.1"
+itertools = "0.13.0"
 lcms2 = "6.1.0"
 num_enum = "0.7.2"
-tokio = { version = "1.36.0", default-features = false, features = ["rt-multi-thread", "macros", "sync"] }
+tokio = { version = "1.38.0", default-features = false, features = ["rt-multi-thread", "macros", "sync"] }
 tokio-stream = { version = "*", default-features = false, features = ["net"] }
-parking_lot = "0.12.1"
+parking_lot = "0.12.3"
 poll-promise = "0.3.0"
-rfd = "0.14.0"
-serde_derive = "1.0.197"
-serde = "1.0.197"
+rfd = "0.14.1"
+serde_derive = "1.0.203"
+serde = "1.0.203"
 vapoursynth = { version = "0.4.0", features = ["vapoursynth-api-36", "vapoursynth-functions", "vsscript-api-32", "vsscript-functions"] }
 
 [[bin]]

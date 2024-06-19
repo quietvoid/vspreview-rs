@@ -1,8 +1,9 @@
-use std::{collections::HashMap, num::NonZeroU32};
+use std::collections::HashMap;
 
 use anyhow::{anyhow, Result};
 use eframe::epaint::{Color32, ColorImage, Vec2};
-use fast_image_resize as fr;
+use fast_image_resize::{self as fr, ResizeAlg, ResizeOptions};
+use fr::images::Image as FrImage;
 use image::{DynamicImage, ImageBuffer};
 use rgb::{AsPixels, ComponentSlice};
 use vapoursynth::prelude::{ColorFamily, FrameRef};
@@ -62,31 +63,27 @@ pub fn resize_fast(
     dst_height: u32,
     filter_type: fr::FilterType,
 ) -> Result<DynamicImage> {
-    let width =
-        NonZeroU32::new(img.width()).ok_or_else(|| anyhow!("resize_fast: Invalid img width"))?;
-    let height =
-        NonZeroU32::new(img.height()).ok_or_else(|| anyhow!("resize_fast: Invalid img height"))?;
+    let width = img.width();
+    let height = img.height();
 
     let src_image = match img {
         DynamicImage::ImageLuma8(luma) => {
-            fr::Image::from_vec_u8(width, height, luma.into_raw(), fr::PixelType::U8)?
+            FrImage::from_vec_u8(width, height, luma.into_raw(), fr::PixelType::U8)?
         }
         DynamicImage::ImageRgb8(rgb) => {
-            fr::Image::from_vec_u8(width, height, rgb.into_raw(), fr::PixelType::U8x3)?
+            FrImage::from_vec_u8(width, height, rgb.into_raw(), fr::PixelType::U8x3)?
         }
         _ => unreachable!(),
     };
 
-    let mut dst_image = fr::Image::new(
-        NonZeroU32::new(dst_width).ok_or_else(|| anyhow!("resize_fast: Invalid dst img width"))?,
-        NonZeroU32::new(dst_height)
-            .ok_or_else(|| anyhow!("resize_fast: Invalid dst img height"))?,
-        src_image.pixel_type(),
-    );
-    let mut dst_view = dst_image.view_mut();
+    let mut dst_image = FrImage::new(dst_width, dst_height, src_image.pixel_type());
 
-    let mut resizer = fr::Resizer::new(fr::ResizeAlg::Convolution(filter_type));
-    resizer.resize(&src_image.view(), &mut dst_view)?;
+    let mut resizer = fr::Resizer::new();
+    resizer.resize(
+        &src_image,
+        &mut dst_image,
+        &ResizeOptions::new().resize_alg(ResizeAlg::Convolution(filter_type)),
+    )?;
 
     let resized_img = match dst_image.pixel_type() {
         fr::PixelType::U8 => DynamicImage::ImageLuma8(
@@ -231,7 +228,7 @@ fn release_on_focus_lost<'a>(
     key: &'a str,
     res: &eframe::egui::Response,
 ) -> bool {
-    if !res.has_focus() && (res.drag_released() || res.lost_focus()) {
+    if !res.has_focus() && (res.drag_stopped() || res.lost_focus()) {
         map.insert(key, false);
 
         true

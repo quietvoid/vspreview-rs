@@ -1,6 +1,5 @@
-use eframe::egui::style::Margin;
-use eframe::egui::{self, Frame};
-use eframe::epaint::{Color32, Stroke};
+use eframe::egui::{self, Frame, Margin};
+use eframe::epaint::{Color32, Shadow, Stroke};
 
 use super::*;
 
@@ -24,7 +23,12 @@ impl VSPreviewer {
 
         // Set the global theme, default to dark mode
         let mut global_visuals = egui::style::Visuals::dark();
-        global_visuals.window_shadow = egui::epaint::Shadow::small_light();
+        global_visuals.window_shadow = Shadow {
+            offset: egui::vec2(6.0, 10.0),
+            blur: 8.0,
+            spread: 0.0,
+            color: Color32::from_black_alpha(25),
+        };
         cc.egui_ctx.set_visuals(global_visuals);
 
         // Fix invalid state options
