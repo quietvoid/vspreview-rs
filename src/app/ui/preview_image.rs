@@ -29,7 +29,11 @@ impl UiPreviewImage {
             false
         };
 
-        let zoom_delta = ui.input(|i| i.zoom_delta());
+        let mut zoom_delta = ui.input(|i| i.zoom_delta());
+        if (1.0 - zoom_delta).abs() < 0.025 {
+            zoom_delta = 1.0;
+        }
+
         let scroll_delta = ui.input(|i| i.raw_scroll_delta);
 
         // Acquire frame texture to render now
@@ -280,6 +284,8 @@ impl UiPreviewImage {
             // Zoom
             let mut new_factor = pv.state.zoom_factor;
             let zoom_modifier = if small_step { 0.1 } else { 1.0 };
+
+            println!("{delta} {new_factor}");
 
             // Ignore 1.0 delta, means no zoom done
             if delta < 1.0 {

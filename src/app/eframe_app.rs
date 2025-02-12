@@ -31,6 +31,10 @@ impl VSPreviewer {
         };
         cc.egui_ctx.set_visuals(global_visuals);
 
+        cc.egui_ctx.options_mut(|opts| {
+            opts.zoom_with_keyboard = false;
+        });
+
         // Fix invalid state options
         if self.state.scroll_multiplier <= 0.0 {
             self.state.scroll_multiplier = 1.0;
