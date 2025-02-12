@@ -33,7 +33,7 @@ impl UiControls {
 
         ui.label(RichText::new("Output").color(STATE_LABEL_COLOR));
 
-        egui::ComboBox::from_id_source(egui::Id::new("output_select"))
+        egui::ComboBox::from_id_salt(egui::Id::new("output_select"))
             .selected_text(format!("Output {}", new_output))
             .show_ui(ui, |ui| {
                 for i in pv.outputs.keys().sorted() {
@@ -90,12 +90,12 @@ impl UiControls {
         ui.horizontal(|ui| {
             let x_drag = egui::DragValue::new(&mut new_translate.x)
                 .speed(0.01)
-                .clamp_range(0.0..=1.0)
+                .range(0.0..=1.0)
                 .max_decimals(3);
 
             let y_drag = egui::DragValue::new(&mut new_translate.y)
                 .speed(0.01)
-                .clamp_range(0.0..=1.0)
+                .range(0.0..=1.0)
                 .max_decimals(3);
 
             ui.label(RichText::new("x").color(STATE_LABEL_COLOR));

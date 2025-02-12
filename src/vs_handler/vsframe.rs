@@ -106,7 +106,7 @@ impl VSFrameProps {
         let cambi_score = map.get_float(KEY_CAMBI).ok();
 
         let hdr10_metadata = Hdr10Metadata::new(&map);
-        let is_dolbyvision = map.value_count(KEY_DOVI_RPU).map_or(false, |v| v > 0);
+        let is_dolbyvision = map.value_count(KEY_DOVI_RPU).is_ok_and(|v| v > 0);
 
         VSFrameProps {
             frame_type,

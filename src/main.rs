@@ -52,7 +52,7 @@ async fn main() -> Result<()> {
     let res = eframe::run_native(
         "vspreview-rs",
         eframe::NativeOptions::default(),
-        Box::new(|cc| Box::new(previewer.with_cc(cc))),
+        Box::new(|cc| Ok(Box::new(previewer.with_cc(cc)))),
     );
 
     if let Err(e) = res {

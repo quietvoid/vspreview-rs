@@ -737,7 +737,7 @@ impl VSPreviewer {
             } else if ui.input(|i| i.key_pressed(Key::R)) {
                 self.reload(ctx.clone())
             } else if ui.input(|i| i.modifiers.ctrl && i.modifiers.shift && i.key_pressed(Key::C)) {
-                ui.output_mut(|o| o.copied_text = self.state.cur_frame_no.to_string());
+                ctx.copy_text(self.state.cur_frame_no.to_string());
             }
         }
     }

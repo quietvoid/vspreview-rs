@@ -36,7 +36,7 @@ impl UiPreferences {
                 let new_vs_resizer = &mut pv.state.frame_transform_opts.resizer;
 
                 ui.label(RichText::new("Resizer (chroma)").color(STATE_LABEL_COLOR));
-                egui::ComboBox::from_id_source(egui::Id::new("vs_resizer_select"))
+                egui::ComboBox::from_id_salt(egui::Id::new("vs_resizer_select"))
                     .selected_text(new_vs_resizer.to_string())
                     .show_ui(ui, |ui| {
                         ui.selectable_value(new_vs_resizer, VSResizer::Bilinear, "Bilinear");
@@ -55,7 +55,7 @@ impl UiPreferences {
                 if *new_enable_dithering {
                     let new_dither_algo = &mut pv.state.frame_transform_opts.dither_algo;
 
-                    egui::ComboBox::from_id_source(egui::Id::new("vs_dither_algo_select"))
+                    egui::ComboBox::from_id_salt(egui::Id::new("vs_dither_algo_select"))
                         .selected_text(new_dither_algo.to_string())
                         .show_ui(ui, |ui| {
                             ui.selectable_value(new_dither_algo, VSDitherAlgo::None, "None");
@@ -80,7 +80,7 @@ impl UiPreferences {
                     ui.label(RichText::new("Texture filter").color(STATE_LABEL_COLOR))
                         .on_hover_text("Filter to use when scaling the texture (GPU)");
 
-                    egui::ComboBox::from_id_source(egui::Id::new("texture_filter_select"))
+                    egui::ComboBox::from_id_salt(egui::Id::new("texture_filter_select"))
                         .selected_text(new_texture_filter.to_string())
                         .show_ui(ui, |ui| {
                             ui.selectable_value(
@@ -101,7 +101,7 @@ impl UiPreferences {
                     let new_upsampling_filter = &mut pv.state.upsampling_filter;
 
                     ui.label(RichText::new("Upsampling filter").color(STATE_LABEL_COLOR));
-                    egui::ComboBox::from_id_source(egui::Id::new("upsampling_filter_select"))
+                    egui::ComboBox::from_id_salt(egui::Id::new("upsampling_filter_select"))
                         .selected_text(new_upsampling_filter.to_string())
                         .show_ui(ui, |ui| {
                             ui.selectable_value(
@@ -145,7 +145,7 @@ impl UiPreferences {
 
                 let zoom_mult_dragval = egui::DragValue::new(&mut pv.state.zoom_multiplier)
                     .speed(0.01)
-                    .clamp_range(1.0..=2.0)
+                    .range(1.0..=2.0)
                     .max_decimals(2);
                 ui.label(RichText::new("Zoom multiplier").color(STATE_LABEL_COLOR));
                 let res = ui.add(zoom_mult_dragval);
@@ -156,7 +156,7 @@ impl UiPreferences {
 
                 let scroll_mult_dragval = egui::DragValue::new(&mut pv.state.scroll_multiplier)
                     .speed(0.01)
-                    .clamp_range(0.5..=4.0)
+                    .range(0.5..=4.0)
                     .max_decimals(2);
                 ui.label(RichText::new("Scroll multiplier").color(STATE_LABEL_COLOR));
                 let res = ui.add(scroll_mult_dragval);
@@ -167,7 +167,7 @@ impl UiPreferences {
 
                 let canvas_margin_dragval = egui::DragValue::new(&mut pv.state.canvas_margin)
                     .speed(1)
-                    .clamp_range(0.0..=100.0)
+                    .range(0.0..=100.0)
                     .max_decimals(0);
                 ui.label(RichText::new("Canvas margin").color(STATE_LABEL_COLOR));
                 let res = ui.add(canvas_margin_dragval);
