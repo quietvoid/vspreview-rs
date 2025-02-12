@@ -285,8 +285,6 @@ impl UiPreviewImage {
             let mut new_factor = pv.state.zoom_factor;
             let zoom_modifier = if small_step { 0.1 } else { 1.0 };
 
-            println!("{delta} {new_factor}");
-
             // Ignore 1.0 delta, means no zoom done
             if delta < 1.0 {
                 // Smaller unzooming when below 1.0
