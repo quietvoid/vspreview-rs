@@ -1,5 +1,5 @@
-use super::{egui, egui::RichText, VSPreviewer, STATE_LABEL_COLOR};
-use anyhow::{anyhow, Result};
+use super::{STATE_LABEL_COLOR, VSPreviewer, egui, egui::RichText};
+use anyhow::{Result, anyhow};
 
 pub struct UiFrameProps {}
 

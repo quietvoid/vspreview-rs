@@ -1,8 +1,8 @@
 use super::{
-    custom_widgets::CustomImage, egui, egui::Key, epaint::Vec2, PreviewFilterType, VSPreviewer,
-    MAX_ZOOM, MIN_ZOOM,
+    MAX_ZOOM, MIN_ZOOM, PreviewFilterType, VSPreviewer, custom_widgets::CustomImage, egui,
+    egui::Key, epaint::Vec2,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use eframe::egui::Response;
 
 pub struct UiPreviewImage {}

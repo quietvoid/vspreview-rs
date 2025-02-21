@@ -1,8 +1,8 @@
 use super::{
-    egui, egui::RichText, update_input_key_state, VSPreviewer, MAX_ZOOM, MIN_ZOOM,
-    STATE_LABEL_COLOR,
+    MAX_ZOOM, MIN_ZOOM, STATE_LABEL_COLOR, VSPreviewer, egui, egui::RichText,
+    update_input_key_state,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use itertools::Itertools;
 
 pub struct UiControls {}

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use eframe::egui::Key;
 use eframe::egui::{self, TextureOptions};
 use fast_image_resize as fir;

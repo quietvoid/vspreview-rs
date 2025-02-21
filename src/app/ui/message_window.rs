@@ -1,4 +1,4 @@
-use super::{egui, VSPreviewer};
+use super::{VSPreviewer, egui};
 use eframe::egui::{RichText, Ui};
 
 pub struct MessageWindowUi {}

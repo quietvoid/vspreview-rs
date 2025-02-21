@@ -16,7 +16,7 @@ Requires a VapourSynth installation with support for API 3.6 minimum.
 For the GUI, see [eframe](https://github.com/emilk/egui/tree/master/eframe) dependencies.  
 
 ### Building
-The minimum Rust version to build `vspreview-rs` is 1.59.0.
+The minimum Rust version to build `vspreview-rs` is 1.85.0.
 
 `RUSTFLAGS="-C target-cpu=native" cargo build --release`  
 Targeting the CPU is highly recommended to get the most performance.

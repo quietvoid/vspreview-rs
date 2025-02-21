@@ -1,5 +1,5 @@
 use super::{
-    egui, egui::RichText, update_input_key_state, PreviewFilterType, VSPreviewer, STATE_LABEL_COLOR,
+    PreviewFilterType, STATE_LABEL_COLOR, VSPreviewer, egui, egui::RichText, update_input_key_state,
 };
 
 use crate::{

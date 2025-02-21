@@ -1,4 +1,4 @@
-use super::{egui, UiControls, UiFrameProps, UiPreferences, VSPreviewer};
+use super::{UiControls, UiFrameProps, UiPreferences, VSPreviewer, egui};
 
 pub struct UiStateWindow {}
 

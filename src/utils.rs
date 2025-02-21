@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use eframe::epaint::{Color32, ColorImage, Vec2};
 use fast_image_resize::{self as fr, ResizeAlg, ResizeOptions};
 use fr::images::Image as FrImage;

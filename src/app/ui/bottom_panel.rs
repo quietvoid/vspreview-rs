@@ -1,5 +1,5 @@
-use super::{egui, epaint::Color32, update_input_key_state, VSPreviewer};
-use anyhow::{anyhow, Result};
+use super::{VSPreviewer, egui, epaint::Color32, update_input_key_state};
+use anyhow::{Result, anyhow};
 use eframe::epaint::Marginf;
 
 pub struct UiBottomPanel {}

@@ -1,4 +1,4 @@
-use super::{update_input_key_state, PreviewFilterType, VSPreviewer, MAX_ZOOM, MIN_ZOOM};
+use super::{MAX_ZOOM, MIN_ZOOM, PreviewFilterType, VSPreviewer, update_input_key_state};
 use anyhow::Result;
 use eframe::{
     egui::{self, Layout, RichText},
