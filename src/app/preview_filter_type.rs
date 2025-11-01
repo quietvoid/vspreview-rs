@@ -2,8 +2,10 @@ use std::fmt::Display;
 
 use fast_image_resize as fir;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+/// Filter type to use with fast_image_resize
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub enum PreviewFilterType {
+    #[default]
     Gpu,
     Point,
     Bilinear,
@@ -13,23 +15,11 @@ pub enum PreviewFilterType {
     Lanczos3,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub enum PreviewTextureFilterType {
+    #[default]
     Linear,
     Nearest,
-}
-
-/// Filter type to use with fast_image_resize
-impl Default for PreviewFilterType {
-    fn default() -> Self {
-        Self::Gpu
-    }
-}
-
-impl Default for PreviewTextureFilterType {
-    fn default() -> Self {
-        Self::Linear
-    }
 }
 
 impl From<&PreviewFilterType> for fir::FilterType {

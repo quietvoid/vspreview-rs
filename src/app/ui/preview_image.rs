@@ -3,7 +3,7 @@ use super::{
     egui::Key, epaint::Vec2,
 };
 use anyhow::{Result, anyhow};
-use eframe::egui::Response;
+use eframe::egui::{Response, Sense, UiBuilder};
 
 pub struct UiPreviewImage {}
 
@@ -75,56 +75,58 @@ impl UiPreviewImage {
         let canvas_layout = egui::Layout::centered_and_justified(egui::Direction::TopDown)
             .with_cross_align(cross_align);
 
-        let canvas_res = ui.with_layout(canvas_layout, |ui| {
-            if let Some(pf) = preview_frame {
-                let pf = pf.read();
-                if let Some(tex_mutex) = pf.texture.try_lock() {
-                    if let Some(tex) = &*tex_mutex {
-                        painted_image = true;
+        let canvas_res = ui.scope_builder(UiBuilder::new().sense(Sense::click()), |ui| {
+            ui.with_layout(canvas_layout, |ui| {
+                if let Some(pf) = preview_frame {
+                    let pf = pf.read();
+                    if let Some(tex_mutex) = pf.texture.try_lock() {
+                        if let Some(tex) = &*tex_mutex {
+                            painted_image = true;
 
-                        let mut tex_size = tex.size_vec2();
+                            let mut tex_size = tex.size_vec2();
 
-                        if (tex_size.x > win_size.x || tex_size.y > win_size.y)
-                            && pv.state.fit_to_window
-                        {
-                            // Image larger than window, downscaling
-                            tex_size *= (win_size.x / tex_size.x).min(1.0);
-                            tex_size *= (win_size.y / tex_size.y).min(1.0);
-                        } else if (tex_size.x < win_size.x || tex_size.y < win_size.y)
-                            && pv.state.upscale_to_window
-                            && pv.state.upsampling_filter == PreviewFilterType::Gpu
-                        {
-                            let target_size =
-                                crate::utils::dimensions_for_window(&win_size, &tex_size);
-                            // Image smaller than window, upscale
-                            tex_size = target_size;
+                            if (tex_size.x > win_size.x || tex_size.y > win_size.y)
+                                && pv.state.fit_to_window
+                            {
+                                // Image larger than window, downscaling
+                                tex_size *= (win_size.x / tex_size.x).min(1.0);
+                                tex_size *= (win_size.y / tex_size.y).min(1.0);
+                            } else if (tex_size.x < win_size.x || tex_size.y < win_size.y)
+                                && pv.state.upscale_to_window
+                                && pv.state.upsampling_filter == PreviewFilterType::Gpu
+                            {
+                                let target_size =
+                                    crate::utils::dimensions_for_window(&win_size, &tex_size);
+                                // Image smaller than window, upscale
+                                tex_size = target_size;
+                            }
+
+                            let custom_image = CustomImage::new(tex.id(), tex_size);
+
+                            ui.add(custom_image);
+
+                            if !pv.any_input_focused() && !pv.frame_promise.is_locked() {
+                                let mut res = Self::handle_move_inputs(
+                                    pv,
+                                    ui,
+                                    &image_size,
+                                    zoom_delta,
+                                    scroll_delta,
+                                );
+                                pv.add_error("preview", &res);
+
+                                res = Self::handle_keypresses(pv, ui);
+                                pv.add_error("preview", &res);
+                            }
                         }
+                    };
+                }
 
-                        let custom_image = CustomImage::new(tex.id(), tex_size);
-
-                        ui.add(custom_image);
-
-                        if !pv.any_input_focused() && !pv.frame_promise.is_locked() {
-                            let mut res = Self::handle_move_inputs(
-                                pv,
-                                ui,
-                                &image_size,
-                                zoom_delta,
-                                scroll_delta,
-                            );
-                            pv.add_error("preview", &res);
-
-                            res = Self::handle_keypresses(pv, ui);
-                            pv.add_error("preview", &res);
-                        }
-                    }
-                };
-            }
-
-            // Show loading when reloading or when no image and errors cleared
-            if pv.reload_data.is_some() || (!painted_image && pv.errors.is_empty()) {
-                ui.add(egui::Spinner::new().size(200.0));
-            }
+                // Show loading when reloading or when no image and errors cleared
+                if pv.reload_data.is_some() || (!painted_image && pv.errors.is_empty()) {
+                    ui.add(egui::Spinner::new().size(200.0));
+                }
+            })
         });
 
         Ok(canvas_res.response)

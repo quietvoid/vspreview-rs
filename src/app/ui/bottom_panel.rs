@@ -1,6 +1,6 @@
 use super::{VSPreviewer, egui, epaint::Color32, update_input_key_state};
 use anyhow::{Result, anyhow};
-use eframe::epaint::Marginf;
+use eframe::epaint::MarginF32;
 
 pub struct UiBottomPanel {}
 
@@ -14,7 +14,7 @@ impl UiBottomPanel {
 
         let transparent_frame = egui::Frame::default()
             .fill(Color32::from_black_alpha(96))
-            .inner_margin(Marginf {
+            .inner_margin(MarginF32 {
                 left: 20.0,
                 right: 20.0,
                 top: 10.0,

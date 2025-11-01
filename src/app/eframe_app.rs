@@ -1,5 +1,5 @@
 use eframe::egui::{self, Frame};
-use eframe::epaint::{Color32, Marginf, Shadow, Stroke};
+use eframe::epaint::{Color32, MarginF32, Shadow, Stroke};
 
 use super::*;
 
@@ -64,7 +64,7 @@ impl eframe::App for VSPreviewer {
 
         let panel_frame = Frame::default()
             .fill(Color32::from_gray(51))
-            .inner_margin(Marginf::same(self.state.canvas_margin))
+            .inner_margin(MarginF32::same(self.state.canvas_margin))
             .stroke(Stroke::NONE);
 
         egui::CentralPanel::default()

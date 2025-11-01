@@ -157,7 +157,11 @@ pub fn image_to_colorimage(
         _ => unreachable!(),
     };
 
-    ColorImage { size, pixels }
+    ColorImage {
+        size,
+        source_size: Vec2::from(size.map(|e| e as f32)),
+        pixels,
+    }
 }
 
 // Normalize from max translate value to float with range [-1, 1]

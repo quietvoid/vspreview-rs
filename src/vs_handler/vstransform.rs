@@ -7,35 +7,25 @@ pub struct VSTransformOptions {
     pub dither_algo: VSDitherAlgo,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub enum VSResizer {
     Bilinear,
     Bicubic,
     Point,
     Lanczos,
+    #[default]
     Spline16,
     Spline36,
     Spline64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub enum VSDitherAlgo {
+    #[default]
     None,
     Ordered,
     Random,
     ErrorDiffusion,
-}
-
-impl Default for VSResizer {
-    fn default() -> Self {
-        Self::Spline16
-    }
-}
-
-impl Default for VSDitherAlgo {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 impl VSResizer {

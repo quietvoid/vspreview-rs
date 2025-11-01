@@ -49,12 +49,12 @@ impl PreviewerMainUi {
 
             if ui.button(change_script_text).clicked() {
                 pv.change_script_file(ctx);
-                ui.close_menu();
+                ui.close();
             }
 
             if ui.button(about_text).clicked() {
                 pv.about_window_open = true;
-                ui.close_menu();
+                ui.close();
             }
         });
 
