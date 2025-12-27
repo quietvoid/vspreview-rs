@@ -79,45 +79,45 @@ impl UiPreviewImage {
             ui.with_layout(canvas_layout, |ui| {
                 if let Some(pf) = preview_frame {
                     let pf = pf.read();
-                    if let Some(tex_mutex) = pf.texture.try_lock() {
-                        if let Some(tex) = &*tex_mutex {
-                            painted_image = true;
+                    if let Some(tex_mutex) = pf.texture.try_lock()
+                        && let Some(tex) = &*tex_mutex
+                    {
+                        painted_image = true;
 
-                            let mut tex_size = tex.size_vec2();
+                        let mut tex_size = tex.size_vec2();
 
-                            if (tex_size.x > win_size.x || tex_size.y > win_size.y)
-                                && pv.state.fit_to_window
-                            {
-                                // Image larger than window, downscaling
-                                tex_size *= (win_size.x / tex_size.x).min(1.0);
-                                tex_size *= (win_size.y / tex_size.y).min(1.0);
-                            } else if (tex_size.x < win_size.x || tex_size.y < win_size.y)
-                                && pv.state.upscale_to_window
-                                && pv.state.upsampling_filter == PreviewFilterType::Gpu
-                            {
-                                let target_size =
-                                    crate::utils::dimensions_for_window(&win_size, &tex_size);
-                                // Image smaller than window, upscale
-                                tex_size = target_size;
-                            }
+                        if (tex_size.x > win_size.x || tex_size.y > win_size.y)
+                            && pv.state.fit_to_window
+                        {
+                            // Image larger than window, downscaling
+                            tex_size *= (win_size.x / tex_size.x).min(1.0);
+                            tex_size *= (win_size.y / tex_size.y).min(1.0);
+                        } else if (tex_size.x < win_size.x || tex_size.y < win_size.y)
+                            && pv.state.upscale_to_window
+                            && pv.state.upsampling_filter == PreviewFilterType::Gpu
+                        {
+                            let target_size =
+                                crate::utils::dimensions_for_window(&win_size, &tex_size);
+                            // Image smaller than window, upscale
+                            tex_size = target_size;
+                        }
 
-                            let custom_image = CustomImage::new(tex.id(), tex_size);
+                        let custom_image = CustomImage::new(tex.id(), tex_size);
 
-                            ui.add(custom_image);
+                        ui.add(custom_image);
 
-                            if !pv.any_input_focused() && !pv.frame_promise.is_locked() {
-                                let mut res = Self::handle_move_inputs(
-                                    pv,
-                                    ui,
-                                    &image_size,
-                                    zoom_delta,
-                                    scroll_delta,
-                                );
-                                pv.add_error("preview", &res);
+                        if !pv.any_input_focused() && !pv.frame_promise.is_locked() {
+                            let mut res = Self::handle_move_inputs(
+                                pv,
+                                ui,
+                                &image_size,
+                                zoom_delta,
+                                scroll_delta,
+                            );
+                            pv.add_error("preview", &res);
 
-                                res = Self::handle_keypresses(pv, ui);
-                                pv.add_error("preview", &res);
-                            }
+                            res = Self::handle_keypresses(pv, ui);
+                            pv.add_error("preview", &res);
                         }
                     };
                 }

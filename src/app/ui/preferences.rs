@@ -205,12 +205,11 @@ impl UiPreferences {
 
     fn transforms_ui(pv: &mut VSPreviewer, ui: &mut egui::Ui, ctx: &egui::Context) {
         let mut profile_name = String::from("None");
-        if let Some(t) = pv.transforms.try_lock() {
-            if let Some(icc) = &t.icc {
-                if let Some(name) = icc.icc_file.file_name() {
-                    profile_name = name.to_str().unwrap().to_string();
-                }
-            }
+        if let Some(t) = pv.transforms.try_lock()
+            && let Some(icc) = &t.icc
+            && let Some(name) = icc.icc_file.file_name()
+        {
+            profile_name = name.to_str().unwrap().to_string();
         }
 
         let max_name_size = profile_name.len().min(50);

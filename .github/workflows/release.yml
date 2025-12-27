@@ -1,0 +1,73 @@
+on:
+  workflow_dispatch:
+
+name: Artifacts
+
+env:
+  RELEASE_BIN: vspreview-rs
+  RELEASE_DIR: artifacts
+  BUILD_PROFILE: release-deploy
+  WINDOWS_TARGET: x86_64-pc-windows-msvc
+  WINDOWS_ARM_TARGET: aarch64-pc-windows-msvc
+
+jobs:
+  windows-binary:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-release-env
+
+      - name: Build
+        run: |
+          rustup target add ${{ env.WINDOWS_ARM_TARGET }}
+
+          cargo build --profile ${{ env.BUILD_PROFILE }}
+          cargo build --profile ${{ env.BUILD_PROFILE }} --target ${{ env.WINDOWS_ARM_TARGET }}
+
+      - name: Create zipfile
+        shell: bash
+        run: |
+          X86_64_ARCHIVE_FILE=${{ env.RELEASE_DIR }}/${{ env.ARCHIVE_PREFIX }}-${{ env.WINDOWS_TARGET }}.zip
+          AARCH64_ARCHIVE_FILE=${{ env.RELEASE_DIR }}/${{ env.ARCHIVE_PREFIX }}-${{ env.WINDOWS_ARM_TARGET }}.zip
+
+          mv ./target/${{ env.BUILD_PROFILE }}/${{ env.RELEASE_BIN }}.exe ./${{ env.RELEASE_BIN }}.exe
+          7z a ./${X86_64_ARCHIVE_FILE} ./${{ env.RELEASE_BIN }}.exe
+
+          mv ./target/${{ env.WINDOWS_ARM_TARGET }}/${{ env.BUILD_PROFILE }}/${{ env.RELEASE_BIN }}.exe ./${{ env.RELEASE_BIN }}.exe
+          7z a ./${AARCH64_ARCHIVE_FILE} ./${{ env.RELEASE_BIN }}.exe
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows artifacts
+          path: ./${{ env.RELEASE_DIR }}/*
+
+  create-release:
+    needs: [windows-binary]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Display structure of downloaded files
+        run: ls -R
+
+      - name: Attest
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: |
+            Windows artifacts/*
+
+      - name: Create a draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_PKG_VERSION }}
+          draft: true
+          files: |
+            Windows artifacts/*

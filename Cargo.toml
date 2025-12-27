@@ -3,7 +3,7 @@ name = "vspreview-rs"
 version = "1.0.1"
 authors = ["quietvoid"]
 edition = "2024"
-rust-version = "1.85.0"
+rust-version = "1.88.0"
 license = "GPL-3.0"
 
 [dependencies]
@@ -29,6 +29,7 @@ vapoursynth = { version = "0.5.0" }
 name = "vspreview-rs"
 path = "src/main.rs"
 
-[profile.release]
-opt-level = 3
-strip = true
+[profile.release-deploy]
+inherits = "release"
+lto = "thin"
+strip = "symbols"

@@ -7,13 +7,12 @@ impl MessageWindowUi {
     pub fn ui(pv: &mut VSPreviewer, ctx: &egui::Context) {
         let mut vs_messages = None;
 
-        if let Some(script_lock) = pv.script.try_lock() {
-            if let Some(mut messages) = script_lock.vs_messages.try_lock() {
-                if !messages.is_empty() {
-                    vs_messages = Some(messages.clone());
-                    messages.clear();
-                }
-            }
+        if let Some(script_lock) = pv.script.try_lock()
+            && let Some(mut messages) = script_lock.vs_messages.try_lock()
+            && !messages.is_empty()
+        {
+            vs_messages = Some(messages.clone());
+            messages.clear();
         }
 
         if let Some(messages) = &vs_messages {

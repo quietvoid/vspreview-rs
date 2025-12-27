@@ -204,60 +204,60 @@ impl VSPreviewer {
     }
 
     pub fn check_reload_finish(&mut self) -> Result<()> {
-        if let Some(promise) = &self.reload_data {
-            if let Some(PreviewerResponse::Reload(promise_res)) = promise.ready() {
-                self.outputs.clear();
+        if let Some(promise) = &self.reload_data
+            && let Some(PreviewerResponse::Reload(promise_res)) = promise.ready()
+        {
+            self.outputs.clear();
 
-                if let Some(outputs) = promise_res {
-                    self.outputs = outputs
-                        .iter()
-                        .map(|(key, o)| {
-                            let new = PreviewOutput {
-                                vsoutput: o.clone(),
-                                ..Default::default()
-                            };
+            if let Some(outputs) = promise_res {
+                self.outputs = outputs
+                    .iter()
+                    .map(|(key, o)| {
+                        let new = PreviewOutput {
+                            vsoutput: o.clone(),
+                            ..Default::default()
+                        };
 
-                            (*key, new)
-                        })
-                        .collect();
+                        (*key, new)
+                    })
+                    .collect();
 
-                    if !self.outputs.contains_key(&self.state.cur_output) {
-                        // Fallback to first output in order
-                        let mut keys: Vec<&i32> = self.outputs.keys().collect();
-                        keys.sort();
+                if !self.outputs.contains_key(&self.state.cur_output) {
+                    // Fallback to first output in order
+                    let mut keys: Vec<&i32> = self.outputs.keys().collect();
+                    keys.sort();
 
-                        self.state.cur_output = **keys
-                            .first()
-                            .ok_or_else(|| anyhow!("No outputs available"))?;
-                    }
-
-                    let output = self
-                        .outputs
-                        .get_mut(&self.state.cur_output)
-                        .ok_or_else(|| anyhow!("outputs reload: Invalid current output key"))?;
-                    let node_info = &output.vsoutput.node_info;
-
-                    self.reload_data = None;
-                    self.last_output_key = self.state.cur_output;
-
-                    if self.state.cur_frame_no >= node_info.num_frames {
-                        self.state.cur_frame_no = node_info.num_frames - 1;
-                    }
-
-                    // Fetch a frame for new current output
-                    self.rerender = true;
+                    self.state.cur_output = **keys
+                        .first()
+                        .ok_or_else(|| anyhow!("No outputs available"))?;
                 }
 
-                // Done reloading, remove promise
-                if let Some(mut mutex) = self.misc_promise.try_lock() {
-                    if (*mutex).is_some() {
-                        *mutex = None;
-                    };
-                }
+                let output = self
+                    .outputs
+                    .get_mut(&self.state.cur_output)
+                    .ok_or_else(|| anyhow!("outputs reload: Invalid current output key"))?;
+                let node_info = &output.vsoutput.node_info;
 
-                // Reset reload data even if errored
                 self.reload_data = None;
+                self.last_output_key = self.state.cur_output;
+
+                if self.state.cur_frame_no >= node_info.num_frames {
+                    self.state.cur_frame_no = node_info.num_frames - 1;
+                }
+
+                // Fetch a frame for new current output
+                self.rerender = true;
             }
+
+            // Done reloading, remove promise
+            if let Some(mut mutex) = self.misc_promise.try_lock()
+                && (*mutex).is_some()
+            {
+                *mutex = None;
+            };
+
+            // Reset reload data even if errored
+            self.reload_data = None;
         }
 
         Ok(())
@@ -347,53 +347,51 @@ impl VSPreviewer {
         if let Some(mut promise_mutex) = self.frame_promise.try_lock() {
             let mut updated_tex = false;
 
-            if let Some(promise) = &*promise_mutex {
-                if let Some(PreviewerResponse::Frame(Some(rendered_frame))) = promise.ready() {
-                    // Block as it's supposed to be ready
-                    let pf = rendered_frame.read();
+            if let Some(promise) = &*promise_mutex
+                && let Some(PreviewerResponse::Frame(Some(rendered_frame))) = promise.ready()
+            {
+                // Block as it's supposed to be ready
+                let pf = rendered_frame.read();
 
-                    if let Some(mut tex_mutex) = pf.texture.try_lock() {
-                        let output =
-                            self.outputs
-                                .get_mut(&self.state.cur_output)
-                                .ok_or_else(|| {
-                                    anyhow!("current_output_mut: Invalid current output key")
-                                })?;
+                if let Some(mut tex_mutex) = pf.texture.try_lock() {
+                    let output = self
+                        .outputs
+                        .get_mut(&self.state.cur_output)
+                        .ok_or_else(|| anyhow!("current_output_mut: Invalid current output key"))?;
 
-                        // Set PreviewFrame from what the promise returned
-                        output.rendered_frame = Some(rendered_frame.clone());
+                    // Set PreviewFrame from what the promise returned
+                    output.rendered_frame = Some(rendered_frame.clone());
 
-                        // Processed if available, otherwise original
-                        let final_image = if let Some(image) = &pf.processed_image {
-                            image
-                        } else {
-                            &pf.vsframe.image
-                        };
-
-                        let transforms = self.transforms.lock();
-
-                        // Convert to ColorImage on texture change
-                        let colorimage = image_to_colorimage(final_image, &self.state, &transforms);
-
-                        let tex_filter = egui::TextureFilter::from(&self.state.texture_filter);
-                        let tex_opts = TextureOptions {
-                            magnification: tex_filter,
-                            minification: tex_filter,
-                            ..Default::default()
-                        };
-                        // Update texture on render done
-                        if let Some(ref mut tex) = *tex_mutex {
-                            tex.set(colorimage, tex_opts);
-                        } else {
-                            *tex_mutex = Some(ctx.load_texture("frame", colorimage, tex_opts));
-                        }
-
-                        // Update last output once the new frame is rendered
-                        self.last_output_key = output.vsoutput.index;
-
-                        updated_tex = true;
+                    // Processed if available, otherwise original
+                    let final_image = if let Some(image) = &pf.processed_image {
+                        image
+                    } else {
+                        &pf.vsframe.image
                     };
-                }
+
+                    let transforms = self.transforms.lock();
+
+                    // Convert to ColorImage on texture change
+                    let colorimage = image_to_colorimage(final_image, &self.state, &transforms);
+
+                    let tex_filter = egui::TextureFilter::from(&self.state.texture_filter);
+                    let tex_opts = TextureOptions {
+                        magnification: tex_filter,
+                        minification: tex_filter,
+                        ..Default::default()
+                    };
+                    // Update texture on render done
+                    if let Some(ref mut tex) = *tex_mutex {
+                        tex.set(colorimage, tex_opts);
+                    } else {
+                        *tex_mutex = Some(ctx.load_texture("frame", colorimage, tex_opts));
+                    }
+
+                    // Update last output once the new frame is rendered
+                    self.last_output_key = output.vsoutput.index;
+
+                    updated_tex = true;
+                };
             }
 
             if updated_tex {
@@ -694,19 +692,19 @@ impl VSPreviewer {
     }
 
     pub fn check_original_props_finish(&mut self) -> Result<()> {
-        if let Some(mut mutex) = self.original_props_promise.try_lock() {
-            if let Some(PreviewerResponse::Props(props)) = mutex.as_ref().and_then(|p| p.ready()) {
-                let output = self
-                    .outputs
-                    .get_mut(&self.state.cur_output)
-                    .ok_or_else(|| {
-                        anyhow!("check_original_props_finish: Invalid current output key")
-                    })?;
-                output.original_props = *props;
+        if let Some(mut mutex) = self.original_props_promise.try_lock()
+            && let Some(PreviewerResponse::Props(props)) = mutex.as_ref().and_then(|p| p.ready())
+        {
+            let output = self
+                .outputs
+                .get_mut(&self.state.cur_output)
+                .ok_or_else(|| {
+                    anyhow!("check_original_props_finish: Invalid current output key")
+                })?;
+            output.original_props = *props;
 
-                *mutex = None;
-            };
-        }
+            *mutex = None;
+        };
 
         Ok(())
     }
@@ -829,11 +827,11 @@ impl VSPreviewer {
     pub fn check_misc_finish(&mut self, ctx: &egui::Context) {
         let mut reload_type = None;
 
-        if let Some(mutex) = self.misc_promise.try_lock() {
-            if let Some(PreviewerResponse::Misc(rt)) = mutex.as_ref().and_then(|p| p.ready()) {
-                reload_type = Some(*rt);
-            };
-        }
+        if let Some(mutex) = self.misc_promise.try_lock()
+            && let Some(PreviewerResponse::Misc(rt)) = mutex.as_ref().and_then(|p| p.ready())
+        {
+            reload_type = Some(*rt);
+        };
 
         // Reload handles the promise reset, to avoid rendering other frames
         if let Some(reload_type) = reload_type {
