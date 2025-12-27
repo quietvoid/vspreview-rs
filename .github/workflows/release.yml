@@ -8,7 +8,6 @@ env:
   RELEASE_DIR: artifacts
   BUILD_PROFILE: release-deploy
   WINDOWS_TARGET: x86_64-pc-windows-msvc
-  WINDOWS_ARM_TARGET: aarch64-pc-windows-msvc
 
 jobs:
   windows-binary:
@@ -18,24 +17,21 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-release-env
 
+      - name: Install VapourSynth (Windows)
+        run: build/win64-vs-setup.ps1
+
       - name: Build
         run: |
-          rustup target add ${{ env.WINDOWS_ARM_TARGET }}
-
+          $Env:Path += ";C:\Program Files\VapourSynth;"
           cargo build --profile ${{ env.BUILD_PROFILE }}
-          cargo build --profile ${{ env.BUILD_PROFILE }} --target ${{ env.WINDOWS_ARM_TARGET }}
 
       - name: Create zipfile
         shell: bash
         run: |
           X86_64_ARCHIVE_FILE=${{ env.RELEASE_DIR }}/${{ env.ARCHIVE_PREFIX }}-${{ env.WINDOWS_TARGET }}.zip
-          AARCH64_ARCHIVE_FILE=${{ env.RELEASE_DIR }}/${{ env.ARCHIVE_PREFIX }}-${{ env.WINDOWS_ARM_TARGET }}.zip
 
           mv ./target/${{ env.BUILD_PROFILE }}/${{ env.RELEASE_BIN }}.exe ./${{ env.RELEASE_BIN }}.exe
           7z a ./${X86_64_ARCHIVE_FILE} ./${{ env.RELEASE_BIN }}.exe
-
-          mv ./target/${{ env.WINDOWS_ARM_TARGET }}/${{ env.BUILD_PROFILE }}/${{ env.RELEASE_BIN }}.exe ./${{ env.RELEASE_BIN }}.exe
-          7z a ./${AARCH64_ARCHIVE_FILE} ./${{ env.RELEASE_BIN }}.exe
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
