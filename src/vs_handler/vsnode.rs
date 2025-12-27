@@ -17,10 +17,7 @@ impl VSNode {
             Property::Constant(r) => (r.width as u32, r.height as u32),
             Property::Variable => panic!("Only supports constant resolution!"),
         };
-        let format = match info.format {
-            Property::Constant(f) => f,
-            Property::Variable => panic!("Unsupported format!"),
-        };
+        let format = info.format;
 
         let (fr_num, fr_denom) = match info.framerate {
             Property::Constant(fr) => (fr.numerator as u32, fr.denominator as u32),
