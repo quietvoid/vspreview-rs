@@ -30,14 +30,6 @@ pub struct PreviewerMainUi {}
 
 impl PreviewerMainUi {
     pub fn ui(pv: &mut VSPreviewer, ui: &mut egui::Ui) -> Result<()> {
-        let cur_output = pv.state.cur_output;
-        let has_current_output = !pv.outputs.is_empty() && pv.outputs.contains_key(&cur_output);
-
-        // Draw window on top
-        if pv.state.show_gui {
-            UiStateWindow::ui(pv, ui);
-        }
-
         // Centered image painted on
         let canvas_res = UiPreviewImage::ui(pv, ui)?;
         canvas_res.context_menu(|ui| {
@@ -57,11 +49,6 @@ impl PreviewerMainUi {
                 ui.close();
             }
         });
-
-        // Bottom panel
-        if pv.state.show_gui && has_current_output {
-            UiBottomPanel::ui(pv, ui)?;
-        }
 
         // About window
         egui::Window::new("About")

@@ -62,6 +62,11 @@ impl eframe::App for VSPreviewer {
         let promise_res = self.check_promise_callbacks(ui);
         self.add_error("callbacks", &promise_res);
 
+        // Draw window on top
+        if self.state.show_gui {
+            UiStateWindow::ui(self, ui.ctx());
+        }
+
         let panel_frame = Frame::default()
             .fill(Color32::from_gray(51))
             .inner_margin(MarginF32::same(self.state.canvas_margin))
@@ -91,6 +96,20 @@ impl eframe::App for VSPreviewer {
                     MessageWindowUi::ui(self, ui.ctx());
                 }
             });
+
+        let cur_output = self.state.cur_output;
+        let has_current_output = !self.outputs.is_empty() && self.outputs.contains_key(&cur_output);
+
+        // Bottom panel
+        if self.state.show_gui && has_current_output {
+            egui::Area::new(egui::Id::new("bottom_panel_overlay"))
+                .anchor(egui::Align2::LEFT_BOTTOM, egui::Vec2::ZERO)
+                .default_width(ui.available_width())
+                .show(ui.ctx(), |ui| {
+                    let res = UiBottomPanel::ui(self, ui);
+                    self.add_error("bottom_panel", &res);
+                });
+        }
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
