@@ -104,8 +104,9 @@ impl eframe::App for VSPreviewer {
         if self.state.show_gui && has_current_output {
             egui::Area::new(egui::Id::new("bottom_panel_overlay"))
                 .anchor(egui::Align2::LEFT_BOTTOM, egui::Vec2::ZERO)
-                .default_width(ui.available_width())
                 .show(ui.ctx(), |ui| {
+                    ui.set_width(ui.content_rect().width());
+
                     let res = UiBottomPanel::ui(self, ui);
                     self.add_error("bottom_panel", &res);
                 });
